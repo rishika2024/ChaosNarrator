@@ -158,3 +158,25 @@ test_output = attention(output)
 
 print(f"Attention input shape: {output.shape}")
 print(f"Attention output shape: {test_output.shape}")
+
+
+class TransformerBlock(nn.Module):
+    def __init__(self, embed_dim, num_heads, dropout=0.1):
+        super().__init__()
+        self.ln_1 = nn.LayerNorm(embed_dim) # layer norm 1
+        self.attn = CausalSelfAttention(embed_dim, num_heads, dropout) # self attention layer
+        self.ln_2 = nn.LayerNorm(embed_dim) # layer norm 2
+        # feedforward network linear layer -> GELU -> linear layer -> dropout
+        self.ffn = nn.Sequential(
+            nn.Linear(embed_dim, 4 * embed_dim), # expanding dimension of ffn to 4x for more capacity
+            nn.GELU(), 
+            nn.Linear(4 * embed_dim, embed_dim),
+            nn.Dropout(dropout),
+        )
+
+    def forward(self, x):
+        # x = x + attention(layer 1 norm of x)
+        # x = x + feedforward(layer 2 norm of x) x is the updated x from previous line
+        x = x + self.attn(self.ln_1(x))
+        x = x + self.ffn(self.ln_2(x))
+        return x
