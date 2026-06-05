@@ -9,7 +9,7 @@ import requests
 
 tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
-## patch32 is the smallest CLIP, so fastest to test
+# patch32 is the smallest CLIP, so fastest to test
 clip = CLIPModel.from_pretrained("openai/clip-vit-base-patch32") 
 clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
@@ -76,4 +76,27 @@ print(f"\nOutput shape: {output.shape}")
 num_img = image_features.shape[1]
 num_txt = token_ids.shape[1]
 print(f"That is {num_img} image tokens + {num_txt} text tokens = {num_img + num_txt} total")
-print(f"Each token is a 256-dim vector")
+
+
+class CausalSelfAttention(nn.Module):
+    def __init__(self, embed_dim, num_heads, dropout=0.1):
+        super().__init__()
+
+        # making sure the embedding dimension is divisible by the number of heads
+        # to avoid decimal head dimensions
+        assert embed_dim % num_heads == 0
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+
+        # Weights for query, key, value projections
+        # nn.Linear creates matrix of weights and bias for linear transformation
+        self.W_q = nn.Linear(embed_dim, embed_dim) 
+        self.W_k = nn.Linear(embed_dim, embed_dim)
+        self.W_v = nn.Linear(embed_dim, embed_dim)
+
+        # output projection (combines all heads)
+        self.out_proj = nn.Linear(embed_dim, embed_dim)
+
+        # dropout
+        self.attn_dropout = nn.Dropout(dropout)
+        self.resid_dropout = nn.Dropout(dropout)
