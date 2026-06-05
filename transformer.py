@@ -190,3 +190,26 @@ block_output = block(output)
 print(f"Block input shape: {output.shape}")
 print(f"Block output shape: {block_output.shape}")
 
+class ChaosNarrator(nn.Module):
+    def __init__(self, vocab_size, embed_dim, num_heads, num_layers, max_len, clip_embed_dim=768, dropout=0.1):
+        super().__init__()
+
+        # multimodal embedding
+        self.embedding = MultimodalTokenAndPositionEmbedding(max_len, vocab_size, embed_dim, clip_embed_dim)
+        self.embed_dropout = nn.Dropout(dropout)
+
+        # stacking transformer blocks together
+        self.blocks = nn.ModuleList()
+        for i in range(num_layers):
+            self.blocks.append(TransformerBlock(embed_dim, num_heads, dropout))
+
+        # final layer norm
+        self.ln_f = nn.LayerNorm(embed_dim)
+
+        # output head: mapping embed_dim back to vocab_size
+        self.lm_head = nn.Linear(embed_dim, vocab_size, bias=False)
+
+        # store for generate function
+        self.max_len = max_len
+
+    
