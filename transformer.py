@@ -33,51 +33,51 @@ class MultimodalTokenAndPositionEmbedding(nn.Module):
         positions = self.position_embedding(positions)
         return combined + positions # adding position embeddings to the combined tokens
     
-# # Testing with real data
+# Testing with real data
 
-# # Downloading 2 real images from CLIP github
-# urls = [
-#     "https://raw.githubusercontent.com/pytorch/hub/master/images/dog.jpg",
-#     "https://raw.githubusercontent.com/pytorch/hub/master/images/deeplab1.png",
-# ]
-# images = []
-# for url in urls:
-#     img = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-#     images.append(img)
-#     print(f"Loaded image: {img.size}")
+# Downloading 2 real images from CLIP github
+urls = [
+    "https://raw.githubusercontent.com/pytorch/hub/master/images/dog.jpg",
+    "https://raw.githubusercontent.com/pytorch/hub/master/images/deeplab1.png",
+]
+images = []
+for url in urls:
+    img = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    images.append(img)
+    print(f"Loaded image: {img.size}")
 
-# # Extracting the frozen CLIP features
-# clip_inputs = clip_processor(images=images, return_tensors="pt")
-# with torch.no_grad():
-#     output = clip.vision_model(pixel_values=clip_inputs["pixel_values"])
-#     image_features = output.pooler_output
+# Extracting the frozen CLIP features
+clip_inputs = clip_processor(images=images, return_tensors="pt")
+with torch.no_grad():
+    output = clip.vision_model(pixel_values=clip_inputs["pixel_values"])
+    image_features = output.pooler_output
 
-# print(f"CLIP output shape: {image_features.shape}")
+print(f"CLIP output shape: {image_features.shape}")
 
-# # Add batch dimension: (2, 512) -> (1, 2, 512) because 1 example with 2 images
-# image_features = image_features.unsqueeze(0)
-# print(f"After adding batch dim: {image_features.shape}")
+# Add batch dimension: (2, 512) -> (1, 2, 512) because 1 example with 2 images
+image_features = image_features.unsqueeze(0)
+print(f"After adding batch dim: {image_features.shape}")
 
-# # Tokenize real text keywords
-# text = "dragon gets hit by a bus"
-# token_ids = tokenizer(text, return_tensors="pt").input_ids
-# print(f"Text: '{text}'")
-# print(f"Token IDs: {token_ids}")
-# print(f"Token IDs shape: {token_ids.shape}")
+# Tokenize real text keywords
+text = "dragon gets hit by a bus"
+token_ids = tokenizer(text, return_tensors="pt").input_ids
+print(f"Text: '{text}'")
+print(f"Token IDs: {token_ids}")
+print(f"Token IDs shape: {token_ids.shape}")
 
-# # Run through embedding layer
-# embedding = MultimodalTokenAndPositionEmbedding(
-#     max_len=100,
-#     vocab_size=tokenizer.vocab_size,
-#     embed_dim=256
-# )
+# Run through embedding layer
+embedding = MultimodalTokenAndPositionEmbedding(
+    max_len=100,
+    vocab_size=tokenizer.vocab_size,
+    embed_dim=256
+)
 
-# output = embedding(token_ids, image_features)
+output = embedding(token_ids, image_features)
 
-# print(f"\nOutput shape: {output.shape}")
-# num_img = image_features.shape[1]
-# num_txt = token_ids.shape[1]
-# print(f"That is {num_img} image tokens + {num_txt} text tokens = {num_img + num_txt} total")
+print(f"\nOutput shape: {output.shape}")
+num_img = image_features.shape[1]
+num_txt = token_ids.shape[1]
+print(f"That is {num_img} image tokens + {num_txt} text tokens = {num_img + num_txt} total")
 
 
 class CausalSelfAttention(nn.Module):
@@ -103,48 +103,58 @@ class CausalSelfAttention(nn.Module):
         self.attn_dropout = nn.Dropout(dropout)
         self.resid_dropout = nn.Dropout(dropout)
 
-        def causal_attention_mask(self, T, device):
-            i = torch.arange(T, device=device)[:, None] # [:, None] adds a new dimension to make it a column vector
-            j = torch.arange(T, device=device)
-            # comparing i, j
-            # if i>= j, we want to attend (mask value 1), else mask value 0
-            # this creates a lower triangular matrix of 1s
-            mask = (i >= j).float() 
-            return mask.view(1, 1, T, T)
+    def causal_attention_mask(self, T, device):
+        i = torch.arange(T, device=device)[:, None] # [:, None] adds a new dimension to make it a column vector
+        j = torch.arange(T, device=device)
+        # comparing i, j
+        # if i>= j, we want to attend (mask value 1), else mask value 0
+        # this creates a lower triangular matrix of 1s
+        mask = (i >= j).float() 
+        return mask.view(1, 1, T, T)
+    
+    def forward(self, x):
+        B, T, C = x.size() # batch size, sequence length, embedding dimension
+
+        # creating Q, K, V separately
+        q = self.W_q(x)
+        k = self.W_k(x)
+        v = self.W_v(x)
+
+        # splitting into multiple heads 
+        # view: (B, T, C) -> (B, T, num_heads, head_dim)
+        # transpose: (B, T, num_heads, head_dim) -> (B, num_heads, T, head_dim) for attention calculation
+        q = q.view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
+        k = k.view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
+        v = v.view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
+
+        # calculating attention scores
+        scores = (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim)
+
+        # creating and applying causal mask
+        mask = self.causal_attention_mask(T, x.device)
+        scores = scores.masked_fill(mask == 0, float('-inf'))
+
+        # applying softmax and dropout
+        weights = F.softmax(scores, dim=-1)
+        weights = self.attn_dropout(weights)
+
+        # calculating weighted sum of values
+        out = weights @ v
+
+        # combining heads back together
+        out = out.transpose(1, 2).contiguous().view(B, T, C)
+
+        # final projection
+        out = self.resid_dropout(self.out_proj(out))
+
+        return out
         
-        def forward(self, x):
-            B, T, C = x.size() # batch size, sequence length, embedding dimension
-    
-            # creating Q, K, V separately
-            q = self.W_q(x)
-            k = self.W_k(x)
-            v = self.W_v(x)
-    
-            # splitting into multiple heads 
-            # view: (B, T, C) -> (B, T, num_heads, head_dim)
-            # transpose: (B, T, num_heads, head_dim) -> (B, num_heads, T, head_dim) for attention calculation
-            q = q.view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
-            k = k.view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
-            v = v.view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
-    
-            # calculating attention scores
-            scores = (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim)
-    
-            # creating and applying causal mask
-            mask = self.causal_attention_mask(T, x.device)
-            scores = scores.masked_fill(mask == 0, float('-inf'))
-    
-            # applying softmax and dropout
-            weights = F.softmax(scores, dim=-1)
-            weights = self.attn_dropout(weights)
-    
-            # calculating weighted sum of values
-            out = weights @ v
-    
-            # combining heads back together
-            out = out.transpose(1, 2).contiguous().view(B, T, C)
-    
-            # final projection
-            out = self.resid_dropout(self.out_proj(out))
-    
-            return out
+# Test CausalSelfAttention
+attention = CausalSelfAttention(embed_dim=256, num_heads=4)
+
+# Use the output from your embedding layer as input
+# output shape was (1, 8, 256) from earlier
+test_output = attention(output)
+
+print(f"Attention input shape: {output.shape}")
+print(f"Attention output shape: {test_output.shape}")
