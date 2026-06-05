@@ -1,49 +1,79 @@
-from transformers import AutoTokenizer, CLIPModel
+from transformers import AutoTokenizer, CLIPModel, CLIPProcessor
 import torch.nn as nn
 import torch
+from PIL import Image
+import requests
+
+# Loading the models
 
 
 tokenizer = AutoTokenizer.from_pretrained("gpt2")
-clip = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+
+## patch32 is the smallest CLIP, so fastest to test
+clip = CLIPModel.from_pretrained("openai/clip-vit-base-patch32") 
+clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
 class MultimodalTokenAndPositionEmbedding(nn.Module):
-    def __init__(self, max_len, vocab_size, embed_dim, clip_embed_dim=512):
+    def __init__(self, max_len, vocab_size, embed_dim, clip_embed_dim=768):
         super().__init__()
         self.token_embedding = nn.Embedding(vocab_size, embed_dim)
         self.position_embedding = nn.Embedding(max_len, embed_dim)
         self.image_embedding = nn.Linear(clip_embed_dim, embed_dim)
 
     def forward(self, token_ids, image_features):
-        
         text_tokens = self.token_embedding(token_ids)
-        image_tokens = self.image_embedding(image_features)
-
-        combined = torch.cat([image_tokens, text_tokens], dim=1)
-
-        positions = torch.arange(combined.size(1), device=combined.device)
+        image_tokens = self.image_embedding(image_features)   
+        # Concatenating image and text tokens     
+        combined = torch.cat([image_tokens, text_tokens], dim=1) 
+        # torch.arange(9) creates indices [0, 1, 2, 3, 4, 5, 6, 7, 8] for 2 image token + 7 text tokens
+        positions = torch.arange(combined.size(1), device=combined.device) 
+        # takes indices and maps to position embeddings
         positions = self.position_embedding(positions)
-
-        return combined + positions
+        return combined + positions # adding position embeddings to the combined tokens
     
-# Settings
-batch_size = 2
-num_images = 3
-seq_len = 10
-vocab_size = 50257
-embed_dim = 256
-max_len = 100
+# Testing with real data
 
-# Create the layer
-embedding = MultimodalTokenAndPositionEmbedding(max_len, vocab_size, embed_dim)
+# Downloading 2 real images from CLIP github
+urls = [
+    "https://raw.githubusercontent.com/pytorch/hub/master/images/dog.jpg",
+    "https://raw.githubusercontent.com/pytorch/hub/master/images/deeplab1.png",
+]
+images = []
+for url in urls:
+    img = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    images.append(img)
+    print(f"Loaded image: {img.size}")
 
-# Fake data
-fake_token_ids = torch.randint(0, vocab_size, (batch_size, seq_len))
-fake_image_features = torch.randn(batch_size, num_images, 512)
+# Extracting the frozen CLIP features
+clip_inputs = clip_processor(images=images, return_tensors="pt")
+with torch.no_grad():
+    output = clip.vision_model(pixel_values=clip_inputs["pixel_values"])
+    image_features = output.pooler_output
 
-# Run it
-output = embedding(fake_token_ids, fake_image_features)
+print(f"CLIP output shape: {image_features.shape}")
 
-print(f"Token IDs shape: {fake_token_ids.shape}")
-print(f"Image features shape: {fake_image_features.shape}")
-print(f"Output shape: {output.shape}")
-print(f"Expected: ({batch_size}, {num_images + seq_len}, {embed_dim})")
+# Add batch dimension: (2, 512) -> (1, 2, 512) because 1 example with 2 images
+image_features = image_features.unsqueeze(0)
+print(f"After adding batch dim: {image_features.shape}")
+
+# Tokenize real text keywords
+text = "dragon gets hit by a bus"
+token_ids = tokenizer(text, return_tensors="pt").input_ids
+print(f"Text: '{text}'")
+print(f"Token IDs: {token_ids}")
+print(f"Token IDs shape: {token_ids.shape}")
+
+# Run through embedding layer
+embedding = MultimodalTokenAndPositionEmbedding(
+    max_len=100,
+    vocab_size=tokenizer.vocab_size,
+    embed_dim=256
+)
+
+output = embedding(token_ids, image_features)
+
+print(f"\nOutput shape: {output.shape}")
+num_img = image_features.shape[1]
+num_txt = token_ids.shape[1]
+print(f"That is {num_img} image tokens + {num_txt} text tokens = {num_img + num_txt} total")
+print(f"Each token is a 256-dim vector")
