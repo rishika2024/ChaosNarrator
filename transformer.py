@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch
 from PIL import Image
 import requests
+import math
+import torch.nn.functional as F
 
 # Loading the models
 
@@ -109,3 +111,40 @@ class CausalSelfAttention(nn.Module):
             # this creates a lower triangular matrix of 1s
             mask = (i >= j).float() 
             return mask.view(1, 1, T, T)
+        
+        def forward(self, x):
+            B, T, C = x.size() # batch size, sequence length, embedding dimension
+    
+            # creating Q, K, V separately
+            q = self.W_q(x)
+            k = self.W_k(x)
+            v = self.W_v(x)
+    
+            # splitting into multiple heads 
+            # view: (B, T, C) -> (B, T, num_heads, head_dim)
+            # transpose: (B, T, num_heads, head_dim) -> (B, num_heads, T, head_dim) for attention calculation
+            q = q.view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
+            k = k.view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
+            v = v.view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
+    
+            # calculating attention scores
+            scores = (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim)
+    
+            # creating and applying causal mask
+            mask = self.causal_attention_mask(T, x.device)
+            scores = scores.masked_fill(mask == 0, float('-inf'))
+    
+            # applying softmax and dropout
+            weights = F.softmax(scores, dim=-1)
+            weights = self.attn_dropout(weights)
+    
+            # calculating weighted sum of values
+            out = weights @ v
+    
+            # combining heads back together
+            out = out.transpose(1, 2).contiguous().view(B, T, C)
+    
+            # final projection
+            out = self.resid_dropout(self.out_proj(out))
+    
+            return out
