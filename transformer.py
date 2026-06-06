@@ -212,4 +212,31 @@ class ChaosNarrator(nn.Module):
         # store for generate function
         self.max_len = max_len
 
+    def forward(self, token_ids, image_features, targets=None):
+        # embedding: images + text + positions
+        # then dropout
+        x = self.embedding(token_ids, image_features)
+        x = self.embed_dropout(x)
+
+        # passing through all transformer blocks
+        for block in self.blocks:
+            x = block(x)
+
+        # final layer norm
+        x = self.ln_f(x)
+
+        # predicting next token
+        logits = self.lm_head(x)
+
+        # computing loss if targets provided
+        loss = None
+        if targets is not None:
+            loss = F.cross_entropy(
+                logits.view(-1, logits.size(-1)),
+                targets.view(-1),
+                ignore_index=-1
+            )
+
+        return logits, loss
+
     
