@@ -162,3 +162,77 @@ def run_epoch(loader, training=True):
     return total_loss / total_batches
 
 
+# --- TRAINING ---
+for epoch in range(num_epochs):
+    print(f"\nEpoch {epoch+1}/{num_epochs}")
+
+    train_loss = run_epoch(train_loader, training=True)
+    val_loss = run_epoch(val_loader, training=False)
+
+    train_losses.append(train_loss)
+    val_losses.append(val_loss)
+
+    print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+
+    # Save checkpoint
+    torch.save({
+        'epoch': epoch + 1,
+        'model_state': model.state_dict(),
+        'optimizer_state': optimizer.state_dict(),
+        'train_loss': train_loss,
+        'val_loss': val_loss,
+        'train_losses': train_losses,
+        'val_losses': val_losses,
+        'batch_losses': batch_losses,
+    }, f'checkpoints/epoch_{epoch+1}.pt')
+
+    # Save best model
+    if val_loss < best_val_loss:
+        best_val_loss = val_loss
+        torch.save({
+            'epoch': epoch + 1,
+            'model_state': model.state_dict(),
+            'val_loss': val_loss,
+        }, 'checkpoints/best_model.pt')
+        print(f"  New best model! Val Loss: {val_loss:.4f}")
+
+    # Updating plot after every epoch
+    plot_losses(train_losses, val_losses, batch_losses)
+
+
+# --- TESTING ---
+print("\n" + "=" * 50)
+print("Running test evaluation with best model")
+print("=" * 50)
+
+best = torch.load('checkpoints/best_model.pt')
+model.load_state_dict(best['model_state'])
+print(f"Loaded best model from epoch {best['epoch']}")
+
+test_loss = run_epoch(test_loader, training=False)
+print(f"Test Loss: {test_loss:.4f}")
+
+
+# --- GENERATE SAMPLE STORIES ---
+print("\n" + "=" * 50)
+print("Generating sample stories")
+print("=" * 50)
+
+tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+model.eval()
+with torch.no_grad():
+    for i in range(5):
+        image_feat, input_tokens, _ = test_dataset[i]
+        image_feat = image_feat.unsqueeze(0).to(device)
+
+        start_tokens = torch.tensor([[tokenizer.eos_token_id]]).to(device)
+
+        generated = model.generate(start_tokens, image_feat, max_new_tokens=100, temperature=0.8, top_k=40)
+        story = tokenizer.decode(generated[0], skip_special_tokens=True)
+
+        print(f"\nStory {i+1}:")
+        print(f"  Original: {test_dataset.stories[i][:200]}...")
+        print(f"  Generated: {story[:200]}...")
+
+print("\nDone!")
