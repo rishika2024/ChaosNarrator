@@ -72,9 +72,9 @@ train_dataset = VISTDataset('data/clip_features/train_features.pt', max_len=max_
 val_dataset = VISTDataset('data/clip_features/val_features.pt', max_len=max_len)
 test_dataset = VISTDataset('data/clip_features/test_features.pt', max_len=max_len)
 
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=fix_story_size)
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=fix_story_size)
+test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, collate_fn=fix_story_size)
 
 print(f"Train size: {len(train_dataset)} stories")
 print(f"Val size: {len(val_dataset)} stories")
@@ -97,5 +97,31 @@ val_losses = []
 batch_losses = []  # per-batch training loss for detailed plot
 os.makedirs('checkpoints', exist_ok=True)
 os.makedirs('plots', exist_ok=True)
+
+
+def plot_losses(train_losses, val_losses, batch_losses):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+    # Left plot: train vs val loss per epoch
+    epochs = range(1, len(train_losses) + 1)
+    ax1.plot(epochs, train_losses, 'b-o', label='Train Loss')
+    ax1.plot(epochs, val_losses, 'r-o', label='Val Loss')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
+    ax1.set_title('Train vs Validation Loss')
+    ax1.legend()
+    ax1.grid(True)
+
+    # Right plot: training loss per batch
+    ax2.plot(batch_losses, 'b-', linewidth=0.5)
+    ax2.set_xlabel('Batch')
+    ax2.set_ylabel('Loss')
+    ax2.set_title('Training Loss per Batch')
+    ax2.grid(True)
+
+    plt.tight_layout()
+    plt.savefig('plots/loss_curves.png', dpi=150)
+    plt.close()
+    print("  Plot saved: plots/loss_curves.png")
 
 
