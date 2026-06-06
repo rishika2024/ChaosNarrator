@@ -231,34 +231,36 @@ class ChaosNarrator(nn.Module):
         # computing loss if targets provided
         loss = None
         if targets is not None:
+            # F.cross_entropy compares each prediction against the correct answer        
             loss = F.cross_entropy(
-                logits.view(-1, logits.size(-1)),
-                targets.view(-1),
-                ignore_index=-1
+                logits.view(-1, logits.size(-1)),  # reshape to (batch_size * seq_len, vocab_size) for loss calculation
+                targets.view(-1), # reshape to (batch_size * seq_len) to match logits
+                ignore_index=-1 # if target token is -1, it will be ignored
             )
 
         return logits, loss
     
-    @torch.no_grad()
+    @torch.no_grad() # gradients not needed for generation
     def generate(self, token_ids, image_features, max_new_tokens, temperature=1.0, top_k=None):
-        self.eval()
+        self.eval() # set model to evaluation mode
         for _ in range(max_new_tokens):
-            # crop if sequence is too long
+            # crop if sequence is too long by removing the oldest tokens
             if token_ids.size(1) + image_features.size(1) > self.max_len:
                 token_ids = token_ids[:, -(self.max_len - image_features.size(1)):]
 
             # forward pass
-            logits, _ = self(token_ids, image_features)
+            logits, dummy = self(token_ids, image_features)
 
-            # get logits for last position and scale by temperature
+            # getting logits for last position and scaling by temperature/randomness
             logits = logits[:, -1, :] / temperature
 
-            # top_k filtering
+            # top_k filtering: except the top_k most likely tokens, set the rest to -inf
+            #  so they won't be sampled
             if top_k is not None:
-                v, _ = torch.topk(logits, top_k)
+                v, dummy = torch.topk(logits, top_k)
                 logits[logits < v[:, [-1]]] = float('-inf')
 
-            # softmax to get probabilities
+            # softmax to get probabilities (-inf will become 0 probability)
             probs = F.softmax(logits, dim=-1)
 
             # sample next token
@@ -269,5 +271,29 @@ class ChaosNarrator(nn.Module):
 
         return token_ids
 
+# TESTING THE FULL MODEL
+# Settings
+vocab_size = 50257
+embed_dim = 256
+num_heads = 4
+num_layers = 4
+max_len = 100
+
+# Create model
+model = ChaosNarrator(vocab_size, embed_dim, num_heads, num_layers, max_len)
+
+# Count parameters
+total_params = sum(p.numel() for p in model.parameters())
+print(f"Total parameters: {total_params / 1e6:.2f}M")
+
+# Test forward pass with real data from earlier
+logits, loss = model(token_ids, image_features)
+print(f"Logits shape: {logits.shape}")
+# Expected: (1, 8, 50257) — for each of the 8 tokens, a score for every word in vocab
+
+# Test generate
+generated = model.generate(token_ids, image_features, max_new_tokens=20, temperature=0.8, top_k=40)
+print(f"Generated token IDs shape: {generated.shape}")
+print(f"Generated text: {tokenizer.decode(generated[0])}")
 
     
