@@ -67,6 +67,12 @@ def fix_story_size(batch):
         padded_tgt = F.pad(tgt, (0, pad_len), value=ignore_label)
         padded_targets.append(padded_tgt)
 
+    # a list of individual story tensors of the same length.
+    padded_inputs = torch.stack(padded_inputs)
+    padded_targets = torch.stack(padded_targets)
+    
+    return clip_vectors, padded_inputs, padded_targets
+
 # Load datasets
 train_dataset = VISTDataset('data/clip_features/train_features.pt', max_len=max_len)
 val_dataset = VISTDataset('data/clip_features/val_features.pt', max_len=max_len)
@@ -213,7 +219,7 @@ test_loss = run_epoch(test_loader, training=False)
 print(f"Test Loss: {test_loss:.4f}")
 
 
-# --- GENERATE SAMPLE STORIES ---
+# --- GENERATING SAMPLE STORIES ---
 print("\n" + "=" * 50)
 print("Generating sample stories")
 print("=" * 50)

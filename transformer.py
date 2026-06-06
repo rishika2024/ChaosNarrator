@@ -6,14 +6,7 @@ import requests
 import math
 import torch.nn.functional as F
 
-# Loading the models
 
-
-tokenizer = AutoTokenizer.from_pretrained("gpt2")
-
-# patch32 is the smallest CLIP, so fastest to test
-clip = CLIPModel.from_pretrained("openai/clip-vit-base-patch32") 
-clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
 class MultimodalTokenAndPositionEmbedding(nn.Module):
     def __init__(self, max_len, vocab_size, embed_dim, clip_embed_dim=768):
@@ -31,53 +24,8 @@ class MultimodalTokenAndPositionEmbedding(nn.Module):
         positions = torch.arange(combined.size(1), device=combined.device) 
         # takes indices and maps to position embeddings
         positions = self.position_embedding(positions)
-        return combined + positions # adding position embeddings to the combined tokens
-    
-# Testing with real data
+        return combined + positions # adding position embeddings to the combined tokens   
 
-# Downloading 2 real images from CLIP github
-urls = [
-    "https://raw.githubusercontent.com/pytorch/hub/master/images/dog.jpg",
-    "https://raw.githubusercontent.com/pytorch/hub/master/images/deeplab1.png",
-]
-images = []
-for url in urls:
-    img = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-    images.append(img)
-    print(f"Loaded image: {img.size}")
-
-# Extracting the frozen CLIP features
-clip_inputs = clip_processor(images=images, return_tensors="pt")
-with torch.no_grad():
-    output = clip.vision_model(pixel_values=clip_inputs["pixel_values"])
-    image_features = output.pooler_output
-
-print(f"CLIP output shape: {image_features.shape}")
-
-# Add batch dimension: (2, 512) -> (1, 2, 512) because 1 example with 2 images
-image_features = image_features.unsqueeze(0)
-print(f"After adding batch dim: {image_features.shape}")
-
-# Tokenize real text keywords
-text = "dragon gets hit by a bus"
-token_ids = tokenizer(text, return_tensors="pt").input_ids
-print(f"Text: '{text}'")
-print(f"Token IDs: {token_ids}")
-print(f"Token IDs shape: {token_ids.shape}")
-
-# Run through embedding layer
-embedding = MultimodalTokenAndPositionEmbedding(
-    max_len=100,
-    vocab_size=tokenizer.vocab_size,
-    embed_dim=256
-)
-
-output = embedding(token_ids, image_features)
-
-print(f"\nOutput shape: {output.shape}")
-num_img = image_features.shape[1]
-num_txt = token_ids.shape[1]
-print(f"That is {num_img} image tokens + {num_txt} text tokens = {num_img + num_txt} total")
 
 
 class CausalSelfAttention(nn.Module):
@@ -147,18 +95,7 @@ class CausalSelfAttention(nn.Module):
         # final projection
         out = self.resid_dropout(self.out_proj(out))
 
-        return out
-        
-# Test CausalSelfAttention
-attention = CausalSelfAttention(embed_dim=256, num_heads=4)
-
-# Use the output from your embedding layer as input
-# output shape was (1, 8, 256) from earlier
-test_output = attention(output)
-
-print(f"Attention input shape: {output.shape}")
-print(f"Attention output shape: {test_output.shape}")
-
+        return out     
 
 class TransformerBlock(nn.Module):
     def __init__(self, embed_dim, num_heads, dropout=0.1):
@@ -181,14 +118,6 @@ class TransformerBlock(nn.Module):
         x = x + self.ffn(self.ln_2(x))
         return x
     
-# Test TransformerBlock
-block = TransformerBlock(embed_dim=256, num_heads=4)
-
-# output shape (1, 8, 256)
-block_output = block(output)
-
-print(f"Block input shape: {output.shape}")
-print(f"Block output shape: {block_output.shape}")
 
 class ChaosNarrator(nn.Module):
     def __init__(self, vocab_size, embed_dim, num_heads, num_layers, max_len, clip_embed_dim=768, dropout=0.1):
@@ -271,29 +200,104 @@ class ChaosNarrator(nn.Module):
 
         return token_ids
 
-# TESTING THE FULL MODEL
-# Settings
-vocab_size = 50257
-embed_dim = 256
-num_heads = 4
-num_layers = 4
-max_len = 100
+if __name__ == "__main__":
+    # Loading the models
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    
+    # patch32 is the smallest CLIP, so fastest to test
+    clip = CLIPModel.from_pretrained("openai/clip-vit-base-patch32") 
+    clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-# Create model
-model = ChaosNarrator(vocab_size, embed_dim, num_heads, num_layers, max_len)
+    # Testing with real data
 
-# Count parameters
-total_params = sum(p.numel() for p in model.parameters())
-print(f"Total parameters: {total_params / 1e6:.2f}M")
+    # Downloading 2 real images from CLIP github
+    urls = [
+        "https://raw.githubusercontent.com/pytorch/hub/master/images/dog.jpg",
+        "https://raw.githubusercontent.com/pytorch/hub/master/images/deeplab1.png",
+    ]
+    images = []
+    for url in urls:
+        img = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        images.append(img)
+        print(f"Loaded image: {img.size}")
+    
+    # Extracting the frozen CLIP features
+    clip_inputs = clip_processor(images=images, return_tensors="pt")
+    with torch.no_grad():
+        output = clip.vision_model(pixel_values=clip_inputs["pixel_values"])
+        image_features = output.pooler_output
+    
+    print(f"CLIP output shape: {image_features.shape}")
+    
+    # Add batch dimension: (2, 512) -> (1, 2, 512) because 1 example with 2 images
+    image_features = image_features.unsqueeze(0)
+    print(f"After adding batch dim: {image_features.shape}")
+    
+    # Tokenize real text keywords
+    text = "dragon gets hit by a bus"
+    token_ids = tokenizer(text, return_tensors="pt").input_ids
+    print(f"Text: '{text}'")
+    print(f"Token IDs: {token_ids}")
+    print(f"Token IDs shape: {token_ids.shape}")
+    
+    # Run through embedding layer
+    embedding = MultimodalTokenAndPositionEmbedding(
+        max_len=100,
+        vocab_size=tokenizer.vocab_size,
+        embed_dim=256
+    )
+    
+    output = embedding(token_ids, image_features)
+    
+    print(f"\nOutput shape: {output.shape}")
+    num_img = image_features.shape[1]
+    num_txt = token_ids.shape[1]
+    print(f"That is {num_img} image tokens + {num_txt} text tokens = {num_img + num_txt} total")
 
-# Test forward pass with real data from earlier
-logits, loss = model(token_ids, image_features)
-print(f"Logits shape: {logits.shape}")
-# Expected: (1, 8, 50257) — for each of the 8 tokens, a score for every word in vocab
 
-# Test generate
-generated = model.generate(token_ids, image_features, max_new_tokens=20, temperature=0.8, top_k=40)
-print(f"Generated token IDs shape: {generated.shape}")
-print(f"Generated text: {tokenizer.decode(generated[0])}")
+    # Test CausalSelfAttention
+    attention = CausalSelfAttention(embed_dim=256, num_heads=4)
+    
+    # Use the output from your embedding layer as input
+    # output shape was (1, 8, 256) from earlier
+    test_output = attention(output)
+    
+    print(f"Attention input shape: {output.shape}")
+    print(f"Attention output shape: {test_output.shape}")
+    
+    # Test TransformerBlock
+    block = TransformerBlock(embed_dim=256, num_heads=4)
+    
+    # output shape (1, 8, 256)
+    block_output = block(output)
+    
+    print(f"Block input shape: {output.shape}")
+    print(f"Block output shape: {block_output.shape}")
+
+    # TESTING THE FULL MODEL
+    # Settings
+    vocab_size = 50257
+    embed_dim = 256
+    num_heads = 4
+    num_layers = 4
+    max_len = 100
+    
+    # Create model
+    model = ChaosNarrator(vocab_size, embed_dim, num_heads, num_layers, max_len)
+    
+    # Count parameters
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Total parameters: {total_params / 1e6:.2f}M")
+    
+    # Test forward pass with real data from earlier
+    logits, loss = model(token_ids, image_features)
+    print(f"Logits shape: {logits.shape}")
+    # Expected: (1, 8, 50257) — for each of the 8 tokens, a score for every word in vocab
+    
+    # Test generate
+    generated = model.generate(token_ids, image_features, max_new_tokens=20, temperature=0.8, top_k=40)
+    print(f"Generated token IDs shape: {generated.shape}")
+    print(f"Generated text: {tokenizer.decode(generated[0])}")
+
 
     
