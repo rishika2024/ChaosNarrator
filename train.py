@@ -24,17 +24,17 @@ print(f"Using device: {device}")
 # A helper function to fix story sizes in a batch by padding them to the same length
 def fix_story_size(batch):
     # Unpacking the batch into separate lists
-    image_feats = []
-    input_tokens = []
+    clip_vectors = [] # raw CLIP features for each story in the batch
+    input_tokens = [] 
     target_tokens = []
 
     for img, inp, tgt in batch:
-        image_feats.append(img)
+        clip_vectors.append(img)
         input_tokens.append(inp)
         target_tokens.append(tgt)
 
-    # Stacking the image since they are already the same size (CLIP features)
-    image_feats = torch.stack(image_feats)
+    # Stacking the clip vectors since they are already the same size (CLIP features)
+    clip_vectors = torch.stack(clip_vectors)
 
     # Finding the longest story in this batch
     max_seq_len = 0
@@ -80,14 +80,14 @@ print(f"Train size: {len(train_dataset)} stories")
 print(f"Val size: {len(val_dataset)} stories")
 print(f"Test size: {len(test_dataset)} stories")
 
-# Create model
+# Creating model
 model = ChaosNarrator(vocab_size, embed_dim, num_heads, num_layers, max_len, clip_embed_dim)
 model = model.to(device)
 
 total_params = sum(p.numel() for p in model.parameters())
 print(f"Total parameters: {total_params / 1e6:.2f}M")
 
-# Optimizer
+# Optimizer: AdamW
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
 # Tracking
@@ -123,5 +123,42 @@ def plot_losses(train_losses, val_losses, batch_losses):
     plt.savefig('plots/loss_curves.png', dpi=150)
     plt.close()
     print("  Plot saved: plots/loss_curves.png")
+
+
+def run_epoch(loader, training=True):
+    if training:
+        model.train()
+        context_train_or_eval = torch.enable_grad()
+    else:
+        model.eval()
+        context_train_or_eval = torch.no_grad()
+
+    total_loss = 0
+    total_batches = 0
+
+    with context_train_or_eval:
+        # Loop through each batch of data
+        for batch_idx, (clip_vectors, input_tokens, target_tokens) in enumerate(loader):
+            # move to gpu if available
+            clip_vectors = clip_vectors.to(device)
+            input_tokens = input_tokens.to(device)
+            target_tokens = target_tokens.to(device)
+
+            logits, loss = model(input_tokens, clip_vectors, targets=target_tokens)
+            if training:
+                optimizer.zero_grad() # clear previous gradients
+                loss.backward() # backpropagation
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # gradient clipping to prevent exploding gradients max vaue is 1.0
+                optimizer.step() # upating model parameters
+                batch_losses.append(loss.item()) # track batch loss for plotting
+
+            total_loss += loss.item()
+            total_batches += 1
+
+            if training and (batch_idx + 1) % 50 == 0:
+                avg = total_loss / total_batches
+                print(f"  Batch {batch_idx+1}/{len(loader)} | Loss: {avg:.4f}")
+
+    return total_loss / total_batches
 
 
