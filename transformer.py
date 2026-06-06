@@ -238,5 +238,36 @@ class ChaosNarrator(nn.Module):
             )
 
         return logits, loss
+    
+    @torch.no_grad()
+    def generate(self, token_ids, image_features, max_new_tokens, temperature=1.0, top_k=None):
+        self.eval()
+        for _ in range(max_new_tokens):
+            # crop if sequence is too long
+            if token_ids.size(1) + image_features.size(1) > self.max_len:
+                token_ids = token_ids[:, -(self.max_len - image_features.size(1)):]
+
+            # forward pass
+            logits, _ = self(token_ids, image_features)
+
+            # get logits for last position and scale by temperature
+            logits = logits[:, -1, :] / temperature
+
+            # top_k filtering
+            if top_k is not None:
+                v, _ = torch.topk(logits, top_k)
+                logits[logits < v[:, [-1]]] = float('-inf')
+
+            # softmax to get probabilities
+            probs = F.softmax(logits, dim=-1)
+
+            # sample next token
+            next_token = torch.multinomial(probs, num_samples=1)
+
+            # append to sequence
+            token_ids = torch.cat([token_ids, next_token], dim=1)
+
+        return token_ids
+
 
     
