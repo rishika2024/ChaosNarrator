@@ -52,12 +52,50 @@ def fix_story_size(batch):
     for i in range(len(input_tokens)):
         inp = input_tokens[i]
         tgt = target_tokens[i]
-    
+        
+        # Calculate how much padding is needed
+        # pad_len = max_seq_len - size of the row (current story length)
         pad_len = max_seq_len - inp.size(0)
-    
-        padded_inp = F.pad(inp, (0, pad_len), value=eos_token)
+        
+        # F.pad adds extra values to the edges of a tensor
+        # Padding EOF tokens to the input
+        # 0-> 0 padding on the left, pad_len -> padding on the right, value is the token to pad with
+        padded_inp = F.pad(inp, (0, pad_len), value=eos_token) 
         padded_inputs.append(padded_inp)
-    
+        
+        # Padding ignore labels to the target        
         padded_tgt = F.pad(tgt, (0, pad_len), value=ignore_label)
         padded_targets.append(padded_tgt)
+
+# Load datasets
+train_dataset = VISTDataset('data/clip_features/train_features.pt', max_len=max_len)
+val_dataset = VISTDataset('data/clip_features/val_features.pt', max_len=max_len)
+test_dataset = VISTDataset('data/clip_features/test_features.pt', max_len=max_len)
+
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
+test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
+
+print(f"Train size: {len(train_dataset)} stories")
+print(f"Val size: {len(val_dataset)} stories")
+print(f"Test size: {len(test_dataset)} stories")
+
+# Create model
+model = ChaosNarrator(vocab_size, embed_dim, num_heads, num_layers, max_len, clip_embed_dim)
+model = model.to(device)
+
+total_params = sum(p.numel() for p in model.parameters())
+print(f"Total parameters: {total_params / 1e6:.2f}M")
+
+# Optimizer
+optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+
+# Tracking
+best_val_loss = float('inf')
+train_losses = []
+val_losses = []
+batch_losses = []  # per-batch training loss for detailed plot
+os.makedirs('checkpoints', exist_ok=True)
+os.makedirs('plots', exist_ok=True)
+
 
