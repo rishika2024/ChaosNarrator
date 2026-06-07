@@ -160,6 +160,10 @@ class ChaosNarrator(nn.Module):
         # computing loss if targets provided
         loss = None
         if targets is not None:
+            # only compute loss on text positions, skip image positions
+            # since image doesn't have anything to compare to
+            num_images = image_features.size(1)
+            text_logits = logits[:, num_images:, :]
             # F.cross_entropy compares each prediction against the correct answer        
             loss = F.cross_entropy(
                 logits.view(-1, logits.size(-1)),  # reshape to (batch_size * seq_len, vocab_size) for loss calculation
