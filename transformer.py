@@ -166,7 +166,7 @@ class ChaosNarrator(nn.Module):
             text_logits = logits[:, num_images:, :]
             # F.cross_entropy compares each prediction against the correct answer        
             loss = F.cross_entropy(
-                logits.view(-1, logits.size(-1)),  # reshape to (batch_size * seq_len, vocab_size) for loss calculation
+                text_logits.reshape(-1, text_logits.size(-1)),  # reshape to (batch_size * seq_len, vocab_size) for loss calculation
                 targets.view(-1), # reshape to (batch_size * seq_len) to match logits
                 ignore_index=-1 # if target token is -1, it will be ignored
             )
