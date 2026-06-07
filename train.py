@@ -16,7 +16,7 @@ max_len = 200
 clip_embed_dim = 768
 batch_size = 16
 learning_rate = 3e-4
-num_epochs = 10
+num_epochs = 15
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 print(f"Using device: {device}")
@@ -218,43 +218,12 @@ print(f"Loaded best model from epoch {best['epoch']}")
 test_loss = run_epoch(test_loader, training=False)
 print(f"Test Loss: {test_loss:.4f}")
 
-
 # --- GENERATING SAMPLE STORIES ---
 print("\n" + "=" * 50)
 print("Generating sample stories")
 print("=" * 50)
 
-import json
-
 tokenizer = AutoTokenizer.from_pretrained("gpt2")
-
-# Load VIST data to find image URLs for test stories
-with open('data/sis/train.story-in-sequence.json') as f:
-    vist_data = json.load(f)
-
-# Build lookup: story_id -> image URLs
-img_lookup = {}
-for img in vist_data['images']:
-    if 'url_o' in img:
-        img_lookup[img['id']] = img['url_o']
-
-stories_raw = {}
-for ann in vist_data['annotations']:
-    ann = ann[0]
-    sid = ann['story_id']
-    if sid not in stories_raw:
-        stories_raw[sid] = []
-    stories_raw[sid].append(ann)
-
-story_to_urls = {}
-for sid, parts in stories_raw.items():
-    parts = sorted(parts, key=lambda x: x['worker_arranged_photo_order'])
-    urls = []
-    for p in parts:
-        fid = p['photo_flickr_id']
-        if fid in img_lookup:
-            urls.append(img_lookup[fid])
-    story_to_urls[sid] = urls
 
 model.eval()
 with torch.no_grad():
@@ -267,14 +236,7 @@ with torch.no_grad():
         generated = model.generate(start_tokens, image_feat, max_new_tokens=100, temperature=0.8, top_k=40)
         story = tokenizer.decode(generated[0], skip_special_tokens=True)
 
-        # Find image URLs for this story
-        story_id = test_dataset.story_ids[i]
-        urls = story_to_urls.get(story_id, [])
-
         print(f"\nStory {i+1}:")
-        print(f"  Images:")
-        for url in urls:
-            print(f"    {url}")
         print(f"  Original: {test_dataset.stories[i][:200]}...")
         print(f"  Generated: {story[:200]}...")
 
