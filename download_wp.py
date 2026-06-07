@@ -1,33 +1,39 @@
+from datasets import load_dataset
 import torch
-from torch.utils.data import Dataset
-from transformers import AutoTokenizer
+import os
 
-class WritingPromptsDataset(Dataset):
-    def __init__(self, features_path, max_len=200, tokenizer_name="gpt2"):
-        data = torch.load(features_path)
-        self.stories = data['stories']
-        self.prompts = data['prompts']
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
-        self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.max_len = max_len
+print("Loading WritingPrompts...")
+dataset = load_dataset("euclaise/writingprompts", split="train")
+print(f"Total examples: {len(dataset)}")
 
-    def __len__(self):
-        return len(self.stories)
+# Filter for stories that are between 100 and 500 words
+stories = []
+prompts = []
 
-    def __getitem__(self, idx):
-        # No images in Stage 2, use dummy zeros
-        # 5 images of 768-dim each, all zeros
-        dummy_image_feat = torch.zeros(5, 768)
+for i in range(len(dataset)):
+    story = dataset[i]['story']
+    prompt = dataset[i]['prompt']
+    
+    word_count = len(story.split())
+    if 100 <= word_count <= 500:
+        stories.append(story)
+        prompts.append(prompt)
+    
+    if len(stories) >= 20000:
+        break
+    
+    if i % 10000 == 0:
+        print(f"Scanned {i} | Kept {len(stories)}")
 
-        # Tokenize the story
-        tokens = self.tokenizer(
-            self.stories[idx],
-            truncation=True,
-            max_length=self.max_len - 5,
-            return_tensors="pt"
-        ).input_ids.squeeze(0)
+print(f"\nKept {len(stories)} stories")
 
-        input_tokens = tokens[:-1]
-        target_tokens = tokens[1:]
+os.makedirs('data/writingprompts', exist_ok=True)
+torch.save({
+    'stories': stories,
+    'prompts': prompts,
+}, 'data/writingprompts/wp_train.pt')
 
-        return dummy_image_feat, input_tokens, target_tokens
+print("Saved to data/writingprompts/wp_train.pt")
+
+print(f"\nSample prompt: {prompts[0][:100]}...")
+print(f"Sample story: {stories[0][:300]}...")
