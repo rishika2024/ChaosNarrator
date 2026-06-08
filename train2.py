@@ -106,3 +106,32 @@ stage1 = torch.load('checkpoints/best_model.pt')
 model.load_state_dict(stage1['model_state'])
 print(f"Loaded Stage 1 best model from epoch {stage1['epoch']}")
 
+# Freeze the image projection layer to preserve image grounding
+for param in model.embedding.image_embedding.parameters():
+    param.requires_grad = False
+print("Frozen image projection layer")
+
+# .numel() returns the total number of elements in the tensor
+# counting how many trainable parameters we have in this model
+total_params = 0
+for p in model.parameters():
+    if p.requires_grad:
+        total_params += p.numel()
+print(f"Trainable parameters: {total_params / 1e6:.2f}M")
+
+
+# Optimizer
+optimizer = torch.optim.AdamW(
+    filter(lambda p: p.requires_grad, model.parameters()),
+    lr=learning_rate
+)
+
+# Tracking
+best_val_loss = float('inf')
+train_losses = []
+val_losses = []
+batch_losses = []
+os.makedirs('checkpoints_stage2', exist_ok=True)
+os.makedirs('plots', exist_ok=True)
+
+
