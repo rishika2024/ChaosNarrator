@@ -57,9 +57,8 @@ def fix_story_size(batch):
         # pad_len = max_seq_len - size of the row (current story length)
         pad_len = max_seq_len - inp.size(0)
         
-        # F.pad adds extra values to the edges of a tensor
-        # Padding EOF tokens to the input
-        # 0-> 0 padding on the left, pad_len -> padding on the right, value is the token to pad with
+        # Calculate how much padding is needed
+        # pad_len = max_seq_len - size of the row (current story length)
         padded_inp = F.pad(inp, (0, pad_len), value=eos_token) 
         padded_inputs.append(padded_inp)
         
