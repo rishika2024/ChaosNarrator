@@ -79,7 +79,7 @@ def fix_story_size(batch):
     return clip_vectors, padded_inputs, padded_targets
 
 # Load WritingPrompts data
-full_data = torch.load('data/small_model/writingprompts/wp_train.pt') # loaded from download_wp.py, contains 'stories' and 'prompts' lists
+full_data = torch.load('data/larger_model/writingprompts/wp_train.pt') # loaded from download_wp.py, contains 'stories' and 'prompts' lists
 total = len(full_data['stories']) # should be 20000 based on download_wp.py filtering
 train_end = int(total * 0.9) # 90% for training, 10% for validation
 
@@ -87,16 +87,16 @@ train_end = int(total * 0.9) # 90% for training, 10% for validation
 torch.save({
     'stories': full_data['stories'][:train_end],
     'prompts': full_data['prompts'][:train_end],
-}, 'data/small_model/writingprompts/wp_train_split.pt')
+}, 'data/larger_model/writingprompts/wp_train_split.pt')
 
 torch.save({
     'stories': full_data['stories'][train_end:],
     'prompts': full_data['prompts'][train_end:],
-}, 'data/small_model/writingprompts/wp_val_split.pt')
+}, 'data/larger_model/writingprompts/wp_val_split.pt')
 
 # Load datasets
-train_dataset = WritingPromptsDataset('data/small_model/writingprompts/wp_train_split.pt', max_len=max_len)
-val_dataset = WritingPromptsDataset('data/small_model/writingprompts/wp_val_split.pt', max_len=max_len)
+train_dataset = WritingPromptsDataset('data/larger_model/writingprompts/wp_train_split.pt', max_len=max_len)
+val_dataset = WritingPromptsDataset('data/larger_model/writingprompts/wp_val_split.pt', max_len=max_len)
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=fix_story_size)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=fix_story_size)
 

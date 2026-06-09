@@ -23,12 +23,12 @@ for i in range(len(dataset)):
 
 print(f"\nKept {len(stories)} stories")
 
-os.makedirs('data/larger_model/writingprompt', exist_ok=True)
+os.makedirs('data/larger_model/writingprompts', exist_ok=True)
 torch.save({
     'stories': stories,
     'prompts': prompts,
-}, 'data/larger_model/writingprompt/wp_train.pt')
+}, 'data/larger_model/writingprompts/wp_train.pt')
 
-print("Saved to data/larger_model/writingprompt/wp_train.pt")
+print("Saved to data/larger_model/writingprompts/wp_train.pt")
 print(f"\nSample prompt: {prompts[0][:100]}...")
 print(f"Sample story: {stories[0][:300]}...")
