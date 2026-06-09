@@ -262,7 +262,7 @@ print("=" * 50)
 
 model.eval()
 with torch.no_grad():
-    for i in range(5):
+    for i in range(10):
         clip_vector, input_tokens, target_tokens = test_dataset[i]
         clip_vector = clip_vector.unsqueeze(0).to(device)
 
