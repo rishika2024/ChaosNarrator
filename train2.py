@@ -268,12 +268,9 @@ with torch.no_grad():
         keywords = test_keywords[i]
         start_tokens = tokenizer(keywords, return_tensors="pt").input_ids.to(device)
         
-        print(f"Start tokens: {start_tokens}")
-        print(f"Decoded start: {tokenizer.decode(start_tokens[0])}")
-
-        generated = model.generate(start_tokens, clip_vector, max_new_tokens=200, temperature=0.9, top_k=40)
         
-        print(f"Generated tokens: {generated[0][:10]}")
+
+        generated = model.generate(start_tokens, clip_vector, max_new_tokens=200, temperature=0.9, top_k=40)        
         
         story = tokenizer.decode(generated[0], skip_special_tokens=True)
 
