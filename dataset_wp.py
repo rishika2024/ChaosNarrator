@@ -21,9 +21,24 @@ class WritingPromptsDataset(Dataset):
         # total 5 images of 768-dim each, all zeros
         dummy_image_feat = torch.zeros(5, 768)
 
+        # Extracting a few keywords from the prompt
+        # Remove common filler words and take first 5 meaningful words
+        prompt = self.prompts[idx]
+
+        # Cleaning up the prompt: remove [WP], [EU], etc.
+        prompt = prompt.replace('[ wp ]', '').replace('[ eu ]', '').replace('[ tt ]', '')
+        prompt = prompt.replace('``', '').replace("''", '').strip()
+
+        # Take first few words as keywords
+        words = prompt.split()[:8]
+        keywords = ' '.join(words)
+
+        # Combine keywords + story with a separator
+        combined = keywords + " | " + self.stories[idx]
+
         # Tokenizing the story
         tokens = self.tokenizer( 
-            self.stories[idx], # the text of the story
+            combined, # the text to tokenize (keywords + story)            
             truncation=True, # truncate if story is too long
             max_length=self.max_len - 5, # reserve space for image tokens
             return_tensors="pt" # return PyTorch tensors

@@ -15,7 +15,7 @@ num_layers = 4
 max_len = 200
 clip_embed_dim = 768
 batch_size = 16
-learning_rate = 5e-5  # lower than Stage 1 to preserve image grounding
+learning_rate = 1e-4  # changed learning rate from 5e-5 earlier
 num_epochs = 20
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -72,7 +72,7 @@ def fix_story_size(batch):
     return clip_vectors, padded_inputs, padded_targets
 
 # Load WritingPrompts data
-full_data = torch.load('data/writingprompts/wp_train.pt') # loaded from download_wp.py, contains 'stories' and 'prompts' lists
+full_data = torch.load('data/wild/writingprompts/wp_train.pt') # loaded from download_wp.py, contains 'stories' and 'prompts' lists
 total = len(full_data['stories']) # should be 20000 based on download_wp.py filtering
 train_end = int(total * 0.9) # 90% for training, 10% for validation
 
@@ -80,16 +80,16 @@ train_end = int(total * 0.9) # 90% for training, 10% for validation
 torch.save({
     'stories': full_data['stories'][:train_end],
     'prompts': full_data['prompts'][:train_end],
-}, 'data/writingprompts/wp_train_split.pt')
+}, 'data/wild/writingprompts/wp_train_split.pt')
 
 torch.save({
     'stories': full_data['stories'][train_end:],
     'prompts': full_data['prompts'][train_end:],
-}, 'data/writingprompts/wp_val_split.pt')
+}, 'data/wild/writingprompts/wp_val_split.pt')
 
 # Load datasets
-train_dataset = WritingPromptsDataset('data/writingprompts/wp_train_split.pt', max_len=max_len)
-val_dataset = WritingPromptsDataset('data/writingprompts/wp_val_split.pt', max_len=max_len)
+train_dataset = WritingPromptsDataset('data/wild/writingprompts/wp_train_split.pt', max_len=max_len)
+val_dataset = WritingPromptsDataset('data/wild/writingprompts/wp_val_split.pt', max_len=max_len)
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=fix_story_size)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=fix_story_size)
@@ -106,10 +106,10 @@ stage1 = torch.load('checkpoints/best_model.pt')
 model.load_state_dict(stage1['model_state'])
 print(f"Loaded Stage 1 best model from epoch {stage1['epoch']}")
 
-# Freeze the image projection layer to preserve image grounding
-for param in model.embedding.image_embedding.parameters():
-    param.requires_grad = False
-print("Frozen image projection layer")
+# # Freeze the image projection layer to preserve image grounding
+# for param in model.embedding.image_embedding.parameters():
+#     param.requires_grad = False
+# print("Frozen image projection layer")
 
 # .numel() returns the total number of elements in the tensor
 # counting how many trainable parameters we have in this model
@@ -157,9 +157,9 @@ def plot_losses(train_losses, val_losses, batch_losses):
     ax2.grid(True)
 
     plt.tight_layout()
-    plt.savefig('plots/frozen/stage2_loss_curves.png', dpi=150)
+    plt.savefig('plots/unfrozen/stage2_loss_curves.png', dpi=150)
     plt.close()
-    print("  Plot saved: plots/frozen/stage2_loss_curves.png")
+    print("  Plot saved: plots/unfrozen/stage2_loss_curves.png")
 
 
 def run_epoch(loader, training=True):
@@ -220,7 +220,7 @@ for epoch in range(num_epochs):
         'optimizer_state': optimizer.state_dict(),
         'train_loss': train_loss,
         'val_loss': val_loss,
-    }, f'checkpoints_stage2/frozen/epoch_{epoch+1}.pt')
+    }, f'checkpoints_stage2/unfrozen/epoch_{epoch+1}.pt')
     
     # Save best model based on validation loss
     if val_loss < best_val_loss:
@@ -229,7 +229,7 @@ for epoch in range(num_epochs):
             'epoch': epoch + 1,
             'model_state': model.state_dict(),
             'val_loss': val_loss,
-        }, 'checkpoints_stage2/frozen/best_model.pt')
+        }, 'checkpoints_stage2/unfrozen/best_model.pt')
         print(f"  New best model! Val Loss: {val_loss:.4f}")
     
     # update the loss plots after each epoch
@@ -245,7 +245,7 @@ from dataset import VISTDataset
 test_dataset = VISTDataset('data/clip_features/test_features.pt', max_len=max_len)
 tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
-best = torch.load('checkpoints_stage2/frozen/best_model.pt')
+best = torch.load('checkpoints_stage2/unfrozen/best_model.pt')
 model.load_state_dict(best['model_state'])
 
 test_keywords = [
@@ -257,7 +257,7 @@ test_keywords = [
 ]
 
 print("\n" + "=" * 50)
-print("Stage 2 Run 1 (frozen projection, low temp)")
+print("Stage 2 Run 1 (unfrozen projection, higher temp)")
 print("=" * 50)
 
 model.eval()
@@ -268,8 +268,14 @@ with torch.no_grad():
 
         keywords = test_keywords[i]
         start_tokens = tokenizer(keywords, return_tensors="pt").input_ids.to(device)
+        
+        print(f"Start tokens: {start_tokens}")
+        print(f"Decoded start: {tokenizer.decode(start_tokens[0])}")
 
-        generated = model.generate(start_tokens, clip_vector, max_new_tokens=150, temperature=0.8, top_k=40)
+        generated = model.generate(start_tokens, clip_vector, max_new_tokens=200, temperature=0.9, top_k=40)
+        
+        print(f"Generated tokens: {generated[0][:10]}")
+        
         story = tokenizer.decode(generated[0], skip_special_tokens=True)
 
         print(f"\nStory {i+1}:")

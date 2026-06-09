@@ -49,7 +49,7 @@ torch.save({
     'stories': stories,
     'prompts': prompts,
 }, 'data/wild/writingprompts/wp_train.pt')
-print("Saved to data/wild/writingprompts/wp_train.pt")
+print("Saved to data/writingprompts/wp_train.pt")
 
 print(f"\nSample wild prompts:")
 for i in range(min(5, len(prompts))):
