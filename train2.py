@@ -137,8 +137,10 @@ os.makedirs('plots', exist_ok=True)
 
 def plot_losses(train_losses, val_losses, batch_losses):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-
+    
     epochs = range(1, len(train_losses) + 1)
+
+    # Left plot: train vs val loss per epoch
     ax1.plot(epochs, train_losses, 'b-o', label='Train Loss')
     ax1.plot(epochs, val_losses, 'r-o', label='Val Loss')
     ax1.set_xlabel('Epoch')
@@ -146,7 +148,8 @@ def plot_losses(train_losses, val_losses, batch_losses):
     ax1.set_title('Stage 2: Train vs Validation Loss')
     ax1.legend()
     ax1.grid(True)
-
+    
+    # Right plot: training loss per batch
     ax2.plot(batch_losses, 'b-', linewidth=0.5)
     ax2.set_xlabel('Batch')
     ax2.set_ylabel('Loss')
@@ -157,5 +160,43 @@ def plot_losses(train_losses, val_losses, batch_losses):
     plt.savefig('plots/stage2_loss_curves.png', dpi=150)
     plt.close()
     print("  Plot saved: plots/stage2_loss_curves.png")
+
+
+def run_epoch(loader, training=True):
+    if training:
+        model.train()
+        context = torch.enable_grad()
+    else:
+        model.eval()
+        context = torch.no_grad()
+
+    total_loss = 0
+    total_batches = 0
+
+    with context:
+        # Loop through each batch of data
+        for batch_idx, (clip_vectors, input_tokens, target_tokens) in enumerate(loader):
+            # move to gpu if available
+            clip_vectors = clip_vectors.to(device)
+            input_tokens = input_tokens.to(device)
+            target_tokens = target_tokens.to(device)
+
+            logits, loss = model(input_tokens, clip_vectors, targets=target_tokens)
+
+            if training:
+                optimizer.zero_grad() # clear previous gradients
+                loss.backward() # backpropagation
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # gradient clipping to prevent exploding gradients max vaue is 1.0
+                optimizer.step() # upating model parameters
+                batch_losses.append(loss.item()) # track batch loss for plotting
+
+            total_loss += loss.item()
+            total_batches += 1
+
+            if training and (batch_idx + 1) % 50 == 0:
+                avg = total_loss / total_batches
+                print(f"  Batch {batch_idx+1}/{len(loader)} | Loss: {avg:.4f}")
+
+    return total_loss / total_batches
 
 
