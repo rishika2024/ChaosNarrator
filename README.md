@@ -92,3 +92,22 @@ Stage 2 — Text-only fine-tuning (scale language behavior)
 - Behavior: loads Stage 1 checkpoint (`larger_model_checkpoints/best_model.pt`) and continues training on text-only data. You can optionally freeze the image projection layer to preserve image grounding (there's commented code in `train2.py` to do this).
 - Checkpoints: saved to `larger_model_checkpoints_stage2/`.
 
+---------------------------------------------------------------
+
+Outputs: 
+
+Stage-1 (train.py)
+- set 5 Stories with keyword input and Generated text
+
+Stage-2 (train2.py)
+-set 5 Creative Stories with keyword input and Generated text
+
+If you want to view the corresponding image:
+run save_test_img.py. 
+test_image0 -> corresponds to story1
+test_image1 -> corresponds to story2
+and so on
+---------------------------------------------------------------------
+
+
+
