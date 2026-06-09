@@ -135,3 +135,27 @@ os.makedirs('checkpoints_stage2', exist_ok=True)
 os.makedirs('plots', exist_ok=True)
 
 
+def plot_losses(train_losses, val_losses, batch_losses):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+    epochs = range(1, len(train_losses) + 1)
+    ax1.plot(epochs, train_losses, 'b-o', label='Train Loss')
+    ax1.plot(epochs, val_losses, 'r-o', label='Val Loss')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
+    ax1.set_title('Stage 2: Train vs Validation Loss')
+    ax1.legend()
+    ax1.grid(True)
+
+    ax2.plot(batch_losses, 'b-', linewidth=0.5)
+    ax2.set_xlabel('Batch')
+    ax2.set_ylabel('Loss')
+    ax2.set_title('Stage 2: Training Loss per Batch')
+    ax2.grid(True)
+
+    plt.tight_layout()
+    plt.savefig('plots/stage2_loss_curves.png', dpi=150)
+    plt.close()
+    print("  Plot saved: plots/stage2_loss_curves.png")
+
+
