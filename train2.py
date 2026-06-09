@@ -9,9 +9,9 @@ import os
 
 # Settings (must match Stage 1)
 vocab_size = 50257
-embed_dim = 256  # was 256 earlier
-num_heads = 4 # was 4 earlier
-num_layers = 4 # was 4 earlier
+embed_dim = 512  # was 256 earlier
+num_heads = 8 # was 4 earlier
+num_layers = 8 # was 4 earlier
 max_len = 200
 clip_embed_dim = 768
 batch_size = 128 # was 16 earlier
@@ -22,6 +22,13 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 def fix_story_size(batch):
+    """Pads stories in a batch to the same length so they can be stacked into tensors.
+
+    clip_vectors will be dummy zeros for Stage 2 (no real images).
+    Inputs are padded with GPT-2's EOS token (50256); targets are padded with -1
+    so those positions are ignored by cross-entropy loss.
+    Returns (clip_vectors, padded_inputs, padded_targets) as stacked tensors.
+    """
     # A helper function to fix story sizes in a batch by padding them to the same length
     clip_vectors = [] # raw CLIP features for each story in the batch (will be dummy zeros for Stage 2)
     input_tokens = [] # tokenized story inputs (without the last token)
@@ -101,9 +108,12 @@ model = ChaosNarrator(vocab_size, embed_dim, num_heads, num_layers, max_len, cli
 model = model.to(device)
 
 # Load best model from Stage 1
-stage1 = torch.load('small_model_checkpoints/checkpoints/best_model.pt')
-model.load_state_dict(stage1['model_state'])
-print(f"Loaded Stage 1 best model from epoch {stage1['epoch']}")
+if not os.path.exists('larger_model_checkpoints/best_model.pt'):
+    print("Warning: Stage 1 checkpoint not found, using fresh model")
+else:
+    stage1 = torch.load('larger_model_checkpoints/best_model.pt')
+    model.load_state_dict(stage1['model_state'])
+    print(f"Loaded Stage 1 best model from epoch {stage1['epoch']}")
 
 # # Freeze the image projection layer to preserve image grounding
 # for param in model.embedding.image_embedding.parameters():
@@ -130,11 +140,16 @@ best_val_loss = float('inf')
 train_losses = []
 val_losses = []
 batch_losses = []
-os.makedirs('larger_model_checkpoints_stage2', exist_ok=True)
-os.makedirs('larger_model_plot', exist_ok=True)
+os.makedirs('larger_model_checkpoints_stage2/unfrozen', exist_ok=True)
+os.makedirs('larger_model_plots/unfrozen', exist_ok=True)
 
 
 def plot_losses(train_losses, val_losses, batch_losses):
+    """Saves a two-panel Stage 2 loss plot to larger_model_plots/unfrozen/stage2_loss_curves.png.
+
+    Left panel: train vs validation loss per epoch.
+    Right panel: training loss per individual batch.
+    """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
     epochs = range(1, len(train_losses) + 1)
@@ -162,6 +177,12 @@ def plot_losses(train_losses, val_losses, batch_losses):
 
 
 def run_epoch(loader, training=True):
+    """Runs one full pass over the dataset, either training or evaluating.
+
+    In training mode: zeros gradients, runs backprop, clips gradients, and steps
+    the optimizer, and appends each batch loss to batch_losses for plotting.
+    Returns the average loss over all batches.
+    """
     if training:
         model.train()
         context = torch.enable_grad()
@@ -244,36 +265,39 @@ from dataset import VISTDataset
 test_dataset = VISTDataset('data/clip_features/test_features.pt', max_len=max_len)
 tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
-best = torch.load('small_model_checkpoints/checkpoints_stage2/unfrozen/best_model.pt')
-model.load_state_dict(best['model_state'])
+if not os.path.exists('larger_model_checkpoints_stage2/unfrozen/best_model.pt'):
+    print("Warning: Stage 2 checkpoint not found, skipping generation")
+else:
+    best = torch.load('larger_model_checkpoints_stage2/unfrozen/best_model.pt')
+    model.load_state_dict(best['model_state'])
 
-test_keywords = [
-    "dragon battle chaos",
-    "time travel apocalypse",
-    "alien invasion pizza",
-    "wizard zombie dance party",
-    "robot falls in love with toaster",
-]
+    test_keywords = [
+        "dragon battle chaos",
+        "time travel apocalypse",
+        "alien invasion pizza",
+        "wizard zombie dance party",
+        "robot falls in love with toaster",
+    ]
 
-print("\n" + "=" * 50)
-print("Stage 2 Run 1 (unfrozen projection, higher temp)")
-print("=" * 50)
+    print("\n" + "=" * 50)
+    print("Stage 2 Run 1 (unfrozen projection, higher temp)")
+    print("=" * 50)
 
-model.eval()
-with torch.no_grad():
-    for i in range(5):
-        clip_vector, input_tokens, target_tokens = test_dataset[i]
-        clip_vector = clip_vector.unsqueeze(0).to(device)
+    model.eval()
+    with torch.no_grad():
+        for i in range(5):
+            clip_vector, input_tokens, target_tokens = test_dataset[i]
+            clip_vector = clip_vector.unsqueeze(0).to(device)
 
-        keywords = test_keywords[i]
-        start_tokens = tokenizer(keywords, return_tensors="pt").input_ids.to(device)
+            keywords = test_keywords[i]
+            start_tokens = tokenizer(keywords, return_tensors="pt").input_ids.to(device)
         
         
 
-        generated = model.generate(start_tokens, clip_vector, max_new_tokens=200, temperature=0.9, top_k=40)        
-        
-        story = tokenizer.decode(generated[0], skip_special_tokens=True)
+            generated = model.generate(start_tokens, clip_vector, max_new_tokens=200, temperature=0.9, top_k=40)
 
-        print(f"\nStory {i+1}:")
-        print(f"  Keywords: {keywords}")
-        print(f"  Generated: {story[:300]}...")
+            story = tokenizer.decode(generated[0], skip_special_tokens=True)
+
+            print(f"\nStory {i+1}:")
+            print(f"  Keywords: {keywords}")
+            print(f"  Generated: {story[:300]}...")

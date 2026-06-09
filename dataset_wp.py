@@ -1,10 +1,22 @@
+import os
 import torch
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
 class WritingPromptsDataset(Dataset):
-    # how to load the stories and prompts
+    """PyTorch Dataset for the WritingPrompts dataset — loads text-only stories with prompts as keywords."""
+
     def __init__(self, features_path, max_len=200, tokenizer_name="gpt2"):
+        """
+        Args:
+            features_path: path to a .pt file with keys 'stories' and 'prompts'.
+            max_len: maximum token sequence length (5 slots reserved for dummy image tokens).
+            tokenizer_name: HuggingFace tokenizer identifier, defaults to GPT-2.
+        """
+        if not os.path.exists(features_path):
+            os.makedirs(os.path.dirname(features_path) or '.', exist_ok=True)
+            torch.save({'stories': [], 'prompts': []}, features_path)
+            print(f"Created empty dataset file: {features_path}")
         data = torch.load(features_path) # {'stories': ..., 'prompts': ...} loaded from saved dataset downloaded in download_wp.py
         self.stories = data['stories'] # list of story texts
         self.prompts = data['prompts'] # list of prompt texts
@@ -13,9 +25,11 @@ class WritingPromptsDataset(Dataset):
         self.max_len = max_len
 
     def __len__(self):
+        """Returns the number of stories in the dataset."""
         return len(self.stories)
 
     def __getitem__(self, idx):
+        """Returns (dummy_image_feat, input_tokens, target_tokens) for one story, with keywords prepended."""
         # Since writing prompts doesn't have associated images
         # we will returning dummy image feature vector of zero
         # total 5 images of 768-dim each, all zeros

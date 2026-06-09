@@ -1,10 +1,22 @@
+import os
 import torch
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
 class VISTDataset(Dataset):
-    # how to load the CLIP features and tokenize the stories for training
+    """PyTorch Dataset for the VIST dataset — loads CLIP image features and tokenizes story text."""
+
     def __init__(self, features_path, max_len=100, tokenizer_name="gpt2"):
+        """
+        Args:
+            features_path: path to a .pt file with keys 'features', 'stories', 'story_ids'.
+            max_len: maximum token sequence length (image tokens are reserved separately).
+            tokenizer_name: HuggingFace tokenizer identifier, defaults to GPT-2.
+        """
+        if not os.path.exists(features_path):
+            os.makedirs(os.path.dirname(features_path) or '.', exist_ok=True)
+            torch.save({'features': torch.zeros(0, 5, 768), 'stories': [], 'story_ids': []}, features_path)
+            print(f"Created empty dataset file: {features_path}")
         data = torch.load(features_path) # {'features': ..., 'stories': ..., 'story_ids': ...}
         self.clip_vectors = data['features']   # (num_stories, 5, 768)
         self.stories = data['stories']
@@ -14,10 +26,12 @@ class VISTDataset(Dataset):
         self.max_len = max_len
 
     def __len__(self):
+        """Returns the number of stories in the dataset."""
         # how many stories do we have in this dataset?
         return len(self.stories)
 
     def __getitem__(self, idx):
+        """Returns (clip_vectors, input_tokens, target_tokens) for one story."""
         # Get CLIP features for this story
         clip_vectors = self.clip_vectors[idx]  # (5, 768)
 

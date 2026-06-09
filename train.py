@@ -23,6 +23,12 @@ print(f"Using device: {device}")
 
 # A helper function to fix story sizes in a batch by padding them to the same length
 def fix_story_size(batch):
+    """Pads stories in a batch to the same length so they can be stacked into tensors.
+
+    Inputs are padded with GPT-2's EOS token (50256); targets are padded with -1
+    so those positions are ignored by cross-entropy loss.
+    Returns (clip_vectors, padded_inputs, padded_targets) as stacked tensors.
+    """
     # Unpacking the batch into separate lists
     clip_vectors = [] # raw CLIP features for each story in the batch
     input_tokens = [] 
@@ -105,6 +111,11 @@ os.makedirs('larger_model_plots', exist_ok=True) # changed from 'plots' to 'larg
 
 
 def plot_losses(train_losses, val_losses, batch_losses):
+    """Saves a two-panel loss plot to larger_model_plots/loss_curves.png.
+
+    Left panel: train vs validation loss per epoch.
+    Right panel: training loss per individual batch.
+    """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
     # Left plot: train vs val loss per epoch
@@ -131,6 +142,12 @@ def plot_losses(train_losses, val_losses, batch_losses):
 
 
 def run_epoch(loader, training=True):
+    """Runs one full pass over the dataset, either training or evaluating.
+
+    In training mode: runs backprop, gradient clipping, and optimizer step, and
+    appends each batch loss to batch_losses for plotting.
+    Returns the average loss over all batches.
+    """
     if training:
         model.train()
         context_train_or_eval = torch.enable_grad()
@@ -210,9 +227,12 @@ print("\n" + "=" * 50)
 print("Running test evaluation with best model")
 print("=" * 50)
 
-best = torch.load('larger_model_checkpoints/best_model.pt')
-model.load_state_dict(best['model_state'])
-print(f"Loaded best model from epoch {best['epoch']}")
+if not os.path.exists('larger_model_checkpoints/best_model.pt'):
+    print("Warning: best_model.pt not found, using current model state")
+else:
+    best = torch.load('larger_model_checkpoints/best_model.pt')
+    model.load_state_dict(best['model_state'])
+    print(f"Loaded best model from epoch {best['epoch']}")
 
 test_loss = run_epoch(test_loader, training=False)
 print(f"Test Loss: {test_loss:.4f}")

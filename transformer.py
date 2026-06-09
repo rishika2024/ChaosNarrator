@@ -9,6 +9,12 @@ import torch.nn.functional as F
 
 
 class MultimodalTokenAndPositionEmbedding(nn.Module):
+    """Combines text token embeddings, projected CLIP image embeddings, and positional embeddings.
+
+    Projects CLIP features from clip_embed_dim to embed_dim via a linear layer, then
+    concatenates image tokens before text tokens and adds positional embeddings to the combined sequence.
+    """
+
     def __init__(self, max_len, vocab_size, embed_dim, clip_embed_dim=768):
         super().__init__()
         self.token_embedding = nn.Embedding(vocab_size, embed_dim)
@@ -29,6 +35,8 @@ class MultimodalTokenAndPositionEmbedding(nn.Module):
 
 
 class CausalSelfAttention(nn.Module):
+    """Multi-head causal self-attention with a lower-triangular mask to prevent attending to future tokens."""
+
     def __init__(self, embed_dim, num_heads, dropout=0.1):
         super().__init__()
 
@@ -98,6 +106,11 @@ class CausalSelfAttention(nn.Module):
         return out     
 
 class TransformerBlock(nn.Module):
+    """Pre-norm transformer block: LayerNorm → CausalSelfAttention → residual, then LayerNorm → FFN → residual.
+
+    FFN expands the embedding dimension to 4x using GELU activation for more capacity.
+    """
+
     def __init__(self, embed_dim, num_heads, dropout=0.1):
         super().__init__()
         self.ln_1 = nn.LayerNorm(embed_dim)  # layer norm 1
@@ -120,6 +133,13 @@ class TransformerBlock(nn.Module):
     
 
 class ChaosNarrator(nn.Module):
+    """GPT-style transformer for image-conditioned story generation.
+
+    Stacks num_layers TransformerBlocks on top of multimodal embeddings (CLIP image tokens + text tokens).
+    At inference time, image features are prepended to the token sequence and the model
+    generates text autoregressively using temperature scaling and top-k sampling.
+    """
+
     def __init__(self, vocab_size, embed_dim, num_heads, num_layers, max_len, clip_embed_dim=768, dropout=0.1):
         super().__init__()
 
@@ -142,6 +162,12 @@ class ChaosNarrator(nn.Module):
         self.max_len = max_len
 
     def forward(self, token_ids, image_features, targets=None):
+        """Forward pass through the full model.
+
+        Loss is computed only on text positions — image token positions are skipped
+        since there is no ground-truth token to compare against.
+        Returns (logits, loss); loss is None when targets are not provided.
+        """
         # embedding: images + text + positions
         # then dropout
         x = self.embedding(token_ids, image_features)
@@ -175,6 +201,13 @@ class ChaosNarrator(nn.Module):
     
     @torch.no_grad() # gradients not needed for generation
     def generate(self, token_ids, image_features, max_new_tokens, temperature=1.0, top_k=None):
+        """Autoregressively generates max_new_tokens tokens conditioned on image_features.
+
+        Scales logits by temperature for randomness control; optionally applies top-k filtering
+        to zero out all but the top-k most likely tokens before sampling.
+        Crops the context window if the sequence exceeds max_len.
+        Returns the full token sequence including the original prompt.
+        """
         self.eval() # set model to evaluation mode
         for _ in range(max_new_tokens):
             # crop if sequence is too long by removing the oldest tokens
@@ -246,9 +279,9 @@ if __name__ == "__main__":
     
     # Run through embedding layer
     embedding = MultimodalTokenAndPositionEmbedding(
-        max_len=100,
+        max_len=200,
         vocab_size=tokenizer.vocab_size,
-        embed_dim=256
+        embed_dim=512
     )
     
     output = embedding(token_ids, image_features)
@@ -260,7 +293,7 @@ if __name__ == "__main__":
 
 
     # Test CausalSelfAttention
-    attention = CausalSelfAttention(embed_dim=256, num_heads=4)
+    attention = CausalSelfAttention(embed_dim=512, num_heads=8)
     
     # Use the output from your embedding layer as input
     # output shape was (1, 8, 256) from earlier
@@ -270,7 +303,7 @@ if __name__ == "__main__":
     print(f"Attention output shape: {test_output.shape}")
     
     # Test TransformerBlock
-    block = TransformerBlock(embed_dim=256, num_heads=4)
+    block = TransformerBlock(embed_dim=512, num_heads=8)
     
     # output shape (1, 8, 256)
     block_output = block(output)
@@ -281,10 +314,10 @@ if __name__ == "__main__":
     # TESTING THE FULL MODEL
     # Settings
     vocab_size = 50257
-    embed_dim = 256
-    num_heads = 4
-    num_layers = 4
-    max_len = 100
+    embed_dim = 512
+    num_heads = 8
+    num_layers = 8
+    max_len = 200
     
     # Create model
     model = ChaosNarrator(vocab_size, embed_dim, num_heads, num_layers, max_len)
