@@ -92,10 +92,3 @@ Stage 2 — Text-only fine-tuning (scale language behavior)
 - Behavior: loads Stage 1 checkpoint (`larger_model_checkpoints/best_model.pt`) and continues training on text-only data. You can optionally freeze the image projection layer to preserve image grounding (there's commented code in `train2.py` to do this).
 - Checkpoints: saved to `larger_model_checkpoints_stage2/`.
 
-Notes:
-- Image tokens are prepended so visual context appears at the start of the sequence.
-- Loss is computed only on text-token positions; image-token positions are ignored during training.
-- Generation uses temperature scaling and optional top-k filtering for sampling.
-
-- If dataset files are missing, training scripts may create minimal placeholder `.pt` files to avoid crashing, but training meaningful models requires real datasets.
-- `transformers` and `torch` versions can affect behavior; pin versions in `requirements.txt` if reproducibility is required.
