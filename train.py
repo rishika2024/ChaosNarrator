@@ -9,14 +9,14 @@ import os
 
 # Settings
 vocab_size = 50257
-embed_dim = 256
-num_heads = 4
-num_layers = 4
+embed_dim = 512  # was 256 earlier
+num_heads = 8 # was 4 earlier
+num_layers = 8 # was 4 earlier
 max_len = 200
 clip_embed_dim = 768
 batch_size = 16
-learning_rate = 3e-4
-num_epochs = 15
+learning_rate = 1e-4
+num_epochs = 20
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 print(f"Using device: {device}")
@@ -100,8 +100,8 @@ best_val_loss = float('inf')
 train_losses = []
 val_losses = []
 batch_losses = []  # per-batch training loss for detailed plot
-os.makedirs('checkpoints', exist_ok=True)
-os.makedirs('plots', exist_ok=True)
+os.makedirs('larger_model_checkpoints', exist_ok=True) # changed from 'checkpoints' to 'larger_model_checkpoints' to avoid confusion with smaller model checkpoints
+os.makedirs('larger_model_plots', exist_ok=True) # changed from 'plots' to 'larger_model_plots' to avoid confusion with smaller model plots
 
 
 def plot_losses(train_losses, val_losses, batch_losses):
@@ -125,9 +125,9 @@ def plot_losses(train_losses, val_losses, batch_losses):
     ax2.grid(True)
 
     plt.tight_layout()
-    plt.savefig('plots/loss_curves.png', dpi=150)
+    plt.savefig('larger_model_plots/loss_curves.png', dpi=150)
     plt.close()
-    print("  Plot saved: plots/loss_curves.png")
+    print("  Plot saved: larger_model_plots/loss_curves.png")
 
 
 def run_epoch(loader, training=True):
@@ -189,7 +189,7 @@ for epoch in range(num_epochs):
         'train_losses': train_losses,
         'val_losses': val_losses,
         'batch_losses': batch_losses,
-    }, f'checkpoints/epoch_{epoch+1}.pt')
+    }, f'larger_model_checkpoints/epoch_{epoch+1}.pt')
 
     # Save best model
     if val_loss < best_val_loss:
@@ -198,7 +198,7 @@ for epoch in range(num_epochs):
             'epoch': epoch + 1,
             'model_state': model.state_dict(),
             'val_loss': val_loss,
-        }, 'checkpoints/best_model.pt')
+        }, 'larger_model_checkpoints/best_model.pt')
         print(f"  New best model! Val Loss: {val_loss:.4f}")
 
     # Updating plot after every epoch
@@ -210,7 +210,7 @@ print("\n" + "=" * 50)
 print("Running test evaluation with best model")
 print("=" * 50)
 
-best = torch.load('checkpoints/best_model.pt')
+best = torch.load('larger_model_checkpoints/best_model.pt')
 model.load_state_dict(best['model_state'])
 print(f"Loaded best model from epoch {best['epoch']}")
 

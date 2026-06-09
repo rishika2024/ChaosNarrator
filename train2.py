@@ -9,14 +9,14 @@ import os
 
 # Settings (must match Stage 1)
 vocab_size = 50257
-embed_dim = 256
-num_heads = 4
-num_layers = 4
+embed_dim = 512  # was 256 earlier
+num_heads = 8 # was 4 earlier
+num_layers = 8 # was 4 earlier
 max_len = 200
 clip_embed_dim = 768
-batch_size = 16
+batch_size = 128 # was 16 earlier
 learning_rate = 1e-4  # changed learning rate from 5e-5 earlier
-num_epochs = 20
+num_epochs = 15
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 print(f"Using device: {device}")
@@ -72,7 +72,7 @@ def fix_story_size(batch):
     return clip_vectors, padded_inputs, padded_targets
 
 # Load WritingPrompts data
-full_data = torch.load('data/wild/writingprompts/wp_train.pt') # loaded from download_wp.py, contains 'stories' and 'prompts' lists
+full_data = torch.load('data/larger_model/writingprompt/wp_train.pt') # loaded from download_wp.py, contains 'stories' and 'prompts' lists
 total = len(full_data['stories']) # should be 20000 based on download_wp.py filtering
 train_end = int(total * 0.9) # 90% for training, 10% for validation
 
@@ -80,17 +80,16 @@ train_end = int(total * 0.9) # 90% for training, 10% for validation
 torch.save({
     'stories': full_data['stories'][:train_end],
     'prompts': full_data['prompts'][:train_end],
-}, 'data/wild/writingprompts/wp_train_split.pt')
+}, 'data/larger_model/writingprompt/wp_train_split.pt')
 
 torch.save({
     'stories': full_data['stories'][train_end:],
     'prompts': full_data['prompts'][train_end:],
-}, 'data/wild/writingprompts/wp_val_split.pt')
+}, 'data/larger_model/writingprompt/wp_val_split.pt')
 
 # Load datasets
-train_dataset = WritingPromptsDataset('data/wild/writingprompts/wp_train_split.pt', max_len=max_len)
-val_dataset = WritingPromptsDataset('data/wild/writingprompts/wp_val_split.pt', max_len=max_len)
-
+train_dataset = WritingPromptsDataset('data/larger_model/writingprompt/wp_train_split.pt', max_len=max_len)
+val_dataset = WritingPromptsDataset('data/larger_model/writingprompt/wp_val_split.pt', max_len=max_len)
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=fix_story_size)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=fix_story_size)
 
@@ -102,14 +101,14 @@ model = ChaosNarrator(vocab_size, embed_dim, num_heads, num_layers, max_len, cli
 model = model.to(device)
 
 # Load best model from Stage 1
-stage1 = torch.load('checkpoints/best_model.pt')
+stage1 = torch.load('larger_model_checkpoints/best_model.pt')
 model.load_state_dict(stage1['model_state'])
 print(f"Loaded Stage 1 best model from epoch {stage1['epoch']}")
 
-# # Freeze the image projection layer to preserve image grounding
-# for param in model.embedding.image_embedding.parameters():
-#     param.requires_grad = False
-# print("Frozen image projection layer")
+# Freeze the image projection layer to preserve image grounding
+for param in model.embedding.image_embedding.parameters():
+    param.requires_grad = False
+print("Frozen image projection layer")
 
 # .numel() returns the total number of elements in the tensor
 # counting how many trainable parameters we have in this model
@@ -131,8 +130,8 @@ best_val_loss = float('inf')
 train_losses = []
 val_losses = []
 batch_losses = []
-os.makedirs('checkpoints_stage2', exist_ok=True)
-os.makedirs('plots', exist_ok=True)
+os.makedirs('larger_model_checkpoints_stage2', exist_ok=True)
+os.makedirs('larger_model_plot', exist_ok=True)
 
 
 def plot_losses(train_losses, val_losses, batch_losses):
@@ -157,9 +156,9 @@ def plot_losses(train_losses, val_losses, batch_losses):
     ax2.grid(True)
 
     plt.tight_layout()
-    plt.savefig('plots/unfrozen/stage2_loss_curves.png', dpi=150)
+    plt.savefig('larger_model_plots/unfrozen/stage2_loss_curves.png', dpi=150)
     plt.close()
-    print("  Plot saved: plots/unfrozen/stage2_loss_curves.png")
+    print("  Plot saved: larger_model_plots/unfrozen/stage2_loss_curves.png")
 
 
 def run_epoch(loader, training=True):
@@ -220,7 +219,7 @@ for epoch in range(num_epochs):
         'optimizer_state': optimizer.state_dict(),
         'train_loss': train_loss,
         'val_loss': val_loss,
-    }, f'checkpoints_stage2/unfrozen/epoch_{epoch+1}.pt')
+    }, f'larger_model_checkpoints_stage2/unfrozen/epoch_{epoch+1}.pt')
     
     # Save best model based on validation loss
     if val_loss < best_val_loss:
@@ -229,7 +228,7 @@ for epoch in range(num_epochs):
             'epoch': epoch + 1,
             'model_state': model.state_dict(),
             'val_loss': val_loss,
-        }, 'checkpoints_stage2/unfrozen/best_model.pt')
+        }, 'larger_model_checkpoints_stage2/unfrozen/best_model.pt')
         print(f"  New best model! Val Loss: {val_loss:.4f}")
     
     # update the loss plots after each epoch
@@ -245,7 +244,7 @@ from dataset import VISTDataset
 test_dataset = VISTDataset('data/clip_features/test_features.pt', max_len=max_len)
 tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
-best = torch.load('checkpoints_stage2/unfrozen/best_model.pt')
+best = torch.load('larger_model_checkpoints_stage2/unfrozen/best_model.pt')
 model.load_state_dict(best['model_state'])
 
 test_keywords = [
