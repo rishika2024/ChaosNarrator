@@ -137,7 +137,7 @@ os.makedirs('plots', exist_ok=True)
 
 def plot_losses(train_losses, val_losses, batch_losses):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-    
+
     epochs = range(1, len(train_losses) + 1)
 
     # Left plot: train vs val loss per epoch
@@ -184,10 +184,10 @@ def run_epoch(loader, training=True):
             logits, loss = model(input_tokens, clip_vectors, targets=target_tokens)
 
             if training:
-                optimizer.zero_grad() # clear previous gradients
-                loss.backward() # backpropagation
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # gradient clipping to prevent exploding gradients max vaue is 1.0
-                optimizer.step() # upating model parameters
+                optimizer.zero_grad() # zero out gradients before backward pass
+                loss.backward() # backpropagation to compute gradients
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # gradient clipping to prevent exploding gradients, max value is 1.0
+                optimizer.step() # update model parameters based on computed gradients
                 batch_losses.append(loss.item()) # track batch loss for plotting
 
             total_loss += loss.item()
@@ -198,5 +198,41 @@ def run_epoch(loader, training=True):
                 print(f"  Batch {batch_idx+1}/{len(loader)} | Loss: {avg:.4f}")
 
     return total_loss / total_batches
+
+
+# --- STAGE 2 TRAINING ---
+print("\nStarting Stage 2 Training (WritingPrompts)")
+for epoch in range(num_epochs):
+    print(f"\nEpoch {epoch+1}/{num_epochs}")
+
+    train_loss = run_epoch(train_loader, training=True)
+    val_loss = run_epoch(val_loader, training=False)
+
+    train_losses.append(train_loss)
+    val_losses.append(val_loss)
+
+    print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+
+    # Save checkpoint
+    torch.save({
+        'epoch': epoch + 1,
+        'model_state': model.state_dict(),
+        'optimizer_state': optimizer.state_dict(),
+        'train_loss': train_loss,
+        'val_loss': val_loss,
+    }, f'checkpoints_stage2/epoch_{epoch+1}.pt')
+    
+    # Save best model based on validation loss
+    if val_loss < best_val_loss:
+        best_val_loss = val_loss
+        torch.save({
+            'epoch': epoch + 1,
+            'model_state': model.state_dict(),
+            'val_loss': val_loss,
+        }, 'checkpoints_stage2/best_model.pt')
+        print(f"  New best model! Val Loss: {val_loss:.4f}")
+    
+    # update the loss plots after each epoch
+    plot_losses(train_losses, val_losses, batch_losses)
 
 
