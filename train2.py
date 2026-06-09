@@ -245,7 +245,7 @@ from dataset import VISTDataset
 test_dataset = VISTDataset('data/clip_features/test_features.pt', max_len=max_len)
 tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
-best = torch.load('checkpoints_stage2/best_model.pt')
+best = torch.load('checkpoints_stage2/frozen/best_model.pt')
 model.load_state_dict(best['model_state'])
 
 test_keywords = [
@@ -262,7 +262,7 @@ print("=" * 50)
 
 model.eval()
 with torch.no_grad():
-    for i in range(10):
+    for i in range(5):
         clip_vector, input_tokens, target_tokens = test_dataset[i]
         clip_vector = clip_vector.unsqueeze(0).to(device)
 
