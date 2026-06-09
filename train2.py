@@ -15,7 +15,7 @@ num_layers = 4
 max_len = 200
 clip_embed_dim = 768
 batch_size = 16
-learning_rate = 1e-4  # lower than Stage 1 to preserve image grounding
+learning_rate = 5e-5  # lower than Stage 1 to preserve image grounding
 num_epochs = 20
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -157,9 +157,9 @@ def plot_losses(train_losses, val_losses, batch_losses):
     ax2.grid(True)
 
     plt.tight_layout()
-    plt.savefig('plots/stage2_loss_curves.png', dpi=150)
+    plt.savefig('plots/frozen/stage2_loss_curves.png', dpi=150)
     plt.close()
-    print("  Plot saved: plots/stage2_loss_curves.png")
+    print("  Plot saved: plots/frozen/stage2_loss_curves.png")
 
 
 def run_epoch(loader, training=True):
@@ -220,7 +220,7 @@ for epoch in range(num_epochs):
         'optimizer_state': optimizer.state_dict(),
         'train_loss': train_loss,
         'val_loss': val_loss,
-    }, f'checkpoints_stage2/epoch_{epoch+1}.pt')
+    }, f'checkpoints_stage2/frozen/epoch_{epoch+1}.pt')
     
     # Save best model based on validation loss
     if val_loss < best_val_loss:
@@ -229,10 +229,49 @@ for epoch in range(num_epochs):
             'epoch': epoch + 1,
             'model_state': model.state_dict(),
             'val_loss': val_loss,
-        }, 'checkpoints_stage2/best_model.pt')
+        }, 'checkpoints_stage2/frozen/best_model.pt')
         print(f"  New best model! Val Loss: {val_loss:.4f}")
     
     # update the loss plots after each epoch
     plot_losses(train_losses, val_losses, batch_losses)
 
 
+# --- GENERATING SAMPLE STORIES ---
+print("\n" + "=" * 50)
+print("Generating stories with images + keywords")
+print("=" * 50)
+
+from dataset import VISTDataset
+test_dataset = VISTDataset('data/clip_features/test_features.pt', max_len=max_len)
+tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+best = torch.load('checkpoints_stage2/best_model.pt')
+model.load_state_dict(best['model_state'])
+
+test_keywords = [
+    "dragon battle chaos",
+    "time travel apocalypse",
+    "alien invasion pizza",
+    "wizard zombie dance party",
+    "robot falls in love with toaster",
+]
+
+print("\n" + "=" * 50)
+print("Stage 2 Run 1 (frozen projection, low temp)")
+print("=" * 50)
+
+model.eval()
+with torch.no_grad():
+    for i in range(5):
+        clip_vector, input_tokens, target_tokens = test_dataset[i]
+        clip_vector = clip_vector.unsqueeze(0).to(device)
+
+        keywords = test_keywords[i]
+        start_tokens = tokenizer(keywords, return_tensors="pt").input_ids.to(device)
+
+        generated = model.generate(start_tokens, clip_vector, max_new_tokens=150, temperature=0.8, top_k=40)
+        story = tokenizer.decode(generated[0], skip_special_tokens=True)
+
+        print(f"\nStory {i+1}:")
+        print(f"  Keywords: {keywords}")
+        print(f"  Generated: {story[:300]}...")
