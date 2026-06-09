@@ -51,7 +51,51 @@ Files & folders
 - `data/` — default dataset location used by scripts.
 - `requirements.txt` — detected project dependencies.
 
-Notes
-----------------
+
+-Architecture
+-------------
+
+High-level data and model flow (arrow diagram):
+
+Image files  →  CLIP Vision Encoder  →  CLIP feature vector (per image)
+	↓
+	(stack/collect multiple images)
+	↓
+CLIP feature vectors  →  Linear projection  →  Image tokens
+	↓
+Image tokens  ⟶  Concatenate  ⟶  [Image tokens + Text token embeddings]
+	↓
+Add positional embeddings
+	↓
+Transformer (stack of pre-norm blocks):
+	LayerNorm → Causal Multi-Head Self-Attention → Residual
+	LayerNorm → Feed-Forward (4× expand, GELU) → Residual
+	↓
+LM head (linear projection to vocab)  →  Softmax / Sampling
+
+Stage 1 — Image-conditioned pretraining
+--------------------------------------
+
+- Purpose: teach the model to condition generation on visual context extracted by CLIP.
+- Input: CLIP features saved in `data/clip_features/*.pt` (produced by `download_flickr.py`).
+- Script: `train.py`.
+- What trains: image projection layer + transformer + LM head (all or configurable).
+- Loss: cross-entropy on text-token positions only; image-token positions are ignored.
+- Checkpoints: saved to `larger_model_checkpoints/` (e.g. `best_model.pt`).
+
+Stage 2 — Text-only fine-tuning (scale language behavior)
+-------------------------------------------------------
+
+- Purpose: improve narrative fluency and diversity using large text corpora while retaining visual grounding from Stage 1.
+- Input: WritingPrompts data saved to `data/larger_model/writingprompts/wp_train.pt` (produced by `download_wp.py`).
+- Script: `train2.py`.
+- Behavior: loads Stage 1 checkpoint (`larger_model_checkpoints/best_model.pt`) and continues training on text-only data. You can optionally freeze the image projection layer to preserve image grounding (there's commented code in `train2.py` to do this).
+- Checkpoints: saved to `larger_model_checkpoints_stage2/`.
+
+Notes:
+- Image tokens are prepended so visual context appears at the start of the sequence.
+- Loss is computed only on text-token positions; image-token positions are ignored during training.
+- Generation uses temperature scaling and optional top-k filtering for sampling.
+
 - If dataset files are missing, training scripts may create minimal placeholder `.pt` files to avoid crashing, but training meaningful models requires real datasets.
 - `transformers` and `torch` versions can affect behavior; pin versions in `requirements.txt` if reproducibility is required.
