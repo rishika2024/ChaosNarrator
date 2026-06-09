@@ -51,7 +51,7 @@ Files & folders
 - `data/` — default dataset location used by scripts.
 - `requirements.txt` — detected project dependencies.
 
-Notes and safety
+Notes
 ----------------
 - If dataset files are missing, training scripts may create minimal placeholder `.pt` files to avoid crashing, but training meaningful models requires real datasets.
 - `transformers` and `torch` versions can affect behavior; pin versions in `requirements.txt` if reproducibility is required.
