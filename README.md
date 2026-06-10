@@ -86,7 +86,7 @@ Stage 1 — Image-conditioned pretraining
 Stage 2 — Text-only fine-tuning (scale language behavior)
 -------------------------------------------------------
 
-- Purpose: improve narrative fluency and diversity using large text corpora while retaining visual grounding from Stage 1.
+- Purpose: improve narrative fluency and diversity using large text while retaining visual grounding from Stage 1.
 - Input: WritingPrompts data saved to `data/larger_model/writingprompts/wp_train.pt` (produced by `download_wp.py`).
 - Script: `train2.py`.
 - Behavior: loads Stage 1 checkpoint (`larger_model_checkpoints/best_model.pt`) and continues training on text-only data. You can optionally freeze the image projection layer to preserve image grounding (there's commented code in `train2.py` to do this).
@@ -100,14 +100,24 @@ Stage-1 (train.py)
 - set 5 Stories with keyword input and Generated text
 
 Stage-2 (train2.py)
--set 5 Creative Stories with keyword input and Generated text
+- set 5 Creative Stories with keyword input and Generated text
 
 If you want to view the corresponding image:
-run save_test_img.py. 
+run `save_test_img.py`
 test_image0 -> corresponds to story1
 test_image1 -> corresponds to story2
 and so on
 ---------------------------------------------------------------------
+
+### To generate output stories
+
+- Download the clip features, test stories and the best model from:
+https://drive.google.com/drive/folders/1Fst4WQp71tv8zd4fgPAm3iZWdQ8ZPKuk?usp=drive_link
+
+- run `generate_story.py`
+
+
+
 
 
 
