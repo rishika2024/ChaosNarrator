@@ -3,7 +3,8 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from dataset_wp import WritingPromptsDataset
 from transformer import ChaosNarrator
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, CLIPModel, CLIPProcessor
+from PIL import Image
 import matplotlib.pyplot as plt
 import os
 
@@ -261,15 +262,15 @@ print("\n" + "=" * 50)
 print("Generating stories with images + keywords")
 print("=" * 50)
 
-from dataset import VISTDataset
-test_dataset = VISTDataset('data/clip_features/test_features.pt', max_len=max_len)
-tokenizer = AutoTokenizer.from_pretrained("gpt2")
-
 if not os.path.exists('larger_model_checkpoints_stage2/unfrozen/best_model.pt'):
     print("Warning: Stage 2 checkpoint not found, skipping generation")
 else:
-    best = torch.load('larger_model_checkpoints_stage2/unfrozen/best_model.pt')
+    best = torch.load('larger_model_checkpoints_stage2/unfrozen/best_model.pt', map_location=device)
     model.load_state_dict(best['model_state'])
+
+    clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
+    clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
     test_keywords = [
         "dragon battle chaos",
@@ -286,18 +287,18 @@ else:
     model.eval()
     with torch.no_grad():
         for i in range(5):
-            clip_vector, input_tokens, target_tokens = test_dataset[i]
-            clip_vector = clip_vector.unsqueeze(0).to(device)
+            # load test image i and extract CLIP features
+            image = Image.open(f'data/test_images/test_{i}.jpg').convert("RGB")
+            inputs = clip_processor(images=image, return_tensors="pt").to(device)
+            feat = clip_model.vision_model(pixel_values=inputs["pixel_values"]).pooler_output  # (1, 768)
+            clip_vector = feat.unsqueeze(1).repeat(1, 5, 1)  # (1, 5, 768)
 
             keywords = test_keywords[i]
             start_tokens = tokenizer(keywords, return_tensors="pt").input_ids.to(device)
-        
-        
 
             generated = model.generate(start_tokens, clip_vector, max_new_tokens=200, temperature=0.9, top_k=40)
-
             story = tokenizer.decode(generated[0], skip_special_tokens=True)
 
-            print(f"\nStory {i+1}:")
+            print(f"\nStory {i+1} (test_{i}.jpg):")
             print(f"  Keywords: {keywords}")
             print(f"  Generated: {story[:300]}...")
