@@ -220,40 +220,40 @@ def run_epoch(loader, training=True):
     return total_loss / total_batches
 
 
-# # --- STAGE 2 TRAINING ---
-# print("\nStarting Stage 2 Training (WritingPrompts)")
-# for epoch in range(num_epochs):
-#     print(f"\nEpoch {epoch+1}/{num_epochs}")
+# --- STAGE 2 TRAINING ---
+print("\nStarting Stage 2 Training (WritingPrompts)")
+for epoch in range(num_epochs):
+    print(f"\nEpoch {epoch+1}/{num_epochs}")
 
-#     train_loss = run_epoch(train_loader, training=True)
-#     val_loss = run_epoch(val_loader, training=False)
+    train_loss = run_epoch(train_loader, training=True)
+    val_loss = run_epoch(val_loader, training=False)
 
-#     train_losses.append(train_loss)
-#     val_losses.append(val_loss)
+    train_losses.append(train_loss)
+    val_losses.append(val_loss)
 
-#     print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+    print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
 
-#     # Save checkpoint
-#     torch.save({
-#         'epoch': epoch + 1,
-#         'model_state': model.state_dict(),
-#         'optimizer_state': optimizer.state_dict(),
-#         'train_loss': train_loss,
-#         'val_loss': val_loss,
-#     }, f'larger_model_checkpoints_stage2/unfrozen/epoch_{epoch+1}.pt')
+    # Save checkpoint
+    torch.save({
+        'epoch': epoch + 1,
+        'model_state': model.state_dict(),
+        'optimizer_state': optimizer.state_dict(),
+        'train_loss': train_loss,
+        'val_loss': val_loss,
+    }, f'larger_model_checkpoints_stage2/unfrozen/epoch_{epoch+1}.pt')
     
-#     # Save best model based on validation loss
-#     if val_loss < best_val_loss:
-#         best_val_loss = val_loss
-#         torch.save({
-#             'epoch': epoch + 1,
-#             'model_state': model.state_dict(),
-#             'val_loss': val_loss,
-#         }, 'larger_model_checkpoints_stage2/unfrozen/best_model.pt')
-#         print(f"  New best model! Val Loss: {val_loss:.4f}")
+    # Save best model based on validation loss
+    if val_loss < best_val_loss:
+        best_val_loss = val_loss
+        torch.save({
+            'epoch': epoch + 1,
+            'model_state': model.state_dict(),
+            'val_loss': val_loss,
+        }, 'larger_model_checkpoints_stage2/unfrozen/best_model.pt')
+        print(f"  New best model! Val Loss: {val_loss:.4f}")
     
-#     # update the loss plots after each epoch
-#     plot_losses(train_losses, val_losses, batch_losses)
+    # update the loss plots after each epoch
+    plot_losses(train_losses, val_losses, batch_losses)
 
 
 # --- GENERATING SAMPLE STORIES ---
