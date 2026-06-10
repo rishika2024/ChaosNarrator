@@ -48,7 +48,8 @@ Files & folders
 - `download_flickr.py`, `download_wp.py` — scripts that download and preprocess datasets.
 - `split_data.py` — splits CLIP features into train/val/test.
 - `train.py`, `train2.py` — training scripts for stage 1 and stage 2.
-- `data/` — default dataset location used by scripts.
+- `genrate_story.py` - generate the stories from the image and keywords
+- `save_test_img.py` - save 10 test images
 - `requirements.txt` — detected project dependencies.
 
 
